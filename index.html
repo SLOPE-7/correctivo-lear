@@ -696,14 +696,14 @@ async function renderTecnico(){
     <div class="card"><button class="btn ghost small" onclick="sheetActivaKey=null;render();">← Elegir otra máquina</button>
       <button class="btn ghost small" style="margin-left:8px;" onclick="STATE.ubtElegida=null;sheetActivaKey=null;render();">← Elegir otro UBT</button></div>
     <div class="card">
-      <h2>Agregar registro — Página ${sheetActivaParams.pagina} (${(sheet.filas||[]).length}/${MAX_FILAS_POR_HOJA})</h2>
+      <h2>Agregar registro en ${escapeHtml(sheet.maquina)} — Página ${sheetActivaParams.pagina} (${(sheet.filas||[]).length}/${MAX_FILAS_POR_HOJA})</h2>
       ${llena ? `
         <p style="font-size:13px;color:var(--amber);font-weight:700;">Esta hoja ya tiene ${MAX_FILAS_POR_HOJA} registros (llena).</p>
         <button class="btn secondary" onclick="siguientePagina()">➕ Abrir Página ${sheetActivaParams.pagina+1}</button>
       ` : `
       <div class="row3">
         <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Hora Inicio</label><input id="f_hi" type="time"></div>
+        <div class="field"><label>Hora Inicio</label><input id="f_hi" type="time" onchange="ajustarHoraFinal()"></div>
         <div class="field"><label>Hora Final</label><input id="f_hf" type="time"></div>
       </div>
       <div class="field"><label>No. Gafete</label><input id="f_gafete" value="${STATE.usuario?.gafete||''}"></div>
@@ -870,9 +870,10 @@ async function renderVerCorrectivos(){
   const ubtDefault = STATE.rol!=='supervisor' ? (STATE.ubtElegida||'') : '';
   return `<div class="card"><h2>Ver correctivos — solo lectura</h2>
     <div class="filters">
-      <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()">
-      <input id="vt_filtro_ubt" placeholder="Filtrar por UBT" value="${escapeHtml(ubtDefault)}" oninput="filtrarVerTodo()">
+      <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()" autocomplete="off" autocorrect="off" spellcheck="false" name="vt_pl_x">
+      <input id="vt_filtro_ubt" placeholder="Filtrar por UBT" value="${escapeHtml(ubtDefault)}" oninput="filtrarVerTodo()" autocomplete="off" autocorrect="off" spellcheck="false" name="vt_ubt_x">
     </div>
+    <button class="btn ghost small" style="margin-bottom:10px;" onclick="limpiarFiltrosVt()">✖ Limpiar filtros</button>
     <div id="vt_lista"></div>
   </div>`;
 }
@@ -890,9 +891,10 @@ async function renderSupervisor(){
   sheetsCache = await listSheets();
   return `<div class="card"><h2>Todas las hojas (solo lectura)</h2>
     <div class="filters">
-      <input id="filtro_planta" placeholder="Filtrar por planta" oninput="filtrarSupervisor()">
-      <input id="filtro_ubt" placeholder="Filtrar por UBT" oninput="filtrarSupervisor()">
+      <input id="filtro_planta" placeholder="Filtrar por planta" oninput="filtrarSupervisor()" autocomplete="off" autocorrect="off" spellcheck="false" name="f_pl_x">
+      <input id="filtro_ubt" placeholder="Filtrar por UBT" oninput="filtrarSupervisor()" autocomplete="off" autocorrect="off" spellcheck="false" name="f_ubt_x">
     </div>
+    <button class="btn ghost small" style="margin-bottom:10px;" onclick="limpiarFiltrosSup()">✖ Limpiar filtros</button>
     <div id="lista_sup"></div>
   </div>`;
 }
@@ -1313,8 +1315,14 @@ async function borrarHistorial(btn){
   }
   btn.textContent = 'Borrando...';
   try{
-    await sbFetch('hojas?clave=neq.__ninguna__', { method:'DELETE', prefer:'return=minimal' });
-    showToast('Historial borrado ✓');
+    await sbFetch('hojas?clave=not.is.null', { method:'DELETE', prefer:'return=minimal' });
+    const quedan = await listSheets();
+    if(quedan.length === 0){
+      colaImpresion = [];
+      showToast('✓ Historial borrado en TODOS los dispositivos');
+    } else {
+      showToast('⚠️ Quedaron ' + quedan.length + ' hoja(s) sin borrar');
+    }
   }catch(err){ showToast('⚠️ '+(err.message||err)); }
   btn.dataset.confirm='';
   render();
@@ -1333,6 +1341,28 @@ document.addEventListener('input', e => {
     try{ t.setSelectionRange(pos, pos); }catch(e){}
   }
 });
+
+function ajustarHoraFinal(){
+  const hi = document.getElementById('f_hi');
+  const hf = document.getElementById('f_hf');
+  if(!hi || !hf || !hi.value) return;
+  const [h,m] = hi.value.split(':').map(Number);
+  const d = new Date(2000,0,1,h,m+1);
+  const minimo = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  hf.min = minimo;
+  if(hf.value && hf.value < minimo) hf.value = minimo;
+}
+
+function limpiarFiltrosSup(){
+  const a=document.getElementById('filtro_planta'), b=document.getElementById('filtro_ubt');
+  if(a) a.value=''; if(b) b.value='';
+  filtrarSupervisor();
+}
+function limpiarFiltrosVt(){
+  const a=document.getElementById('vt_filtro_planta'), b=document.getElementById('vt_filtro_ubt');
+  if(a) a.value=''; if(b) b.value='';
+  filtrarVerTodo();
+}
 
 /* ---------- Notificaciones Push ---------- */
 const VAPID_PUBLIC_KEY = 'BHO00CHONm3Uf0MIaOVAI9SxsAyMd_0hctC7TqKTl5Vpn4Jh1IHBZbHX4PM1fAV2uPr9ZdsmsIW_MaeDBkxmsSg';
