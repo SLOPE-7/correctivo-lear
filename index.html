@@ -17,27 +17,37 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--shell);color:var(--ink);}
-  .topbar{background:var(--line);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:10;}
-  .topbar h1{font-size:15px;margin:0;font-weight:700;}
-  .topbar .who{font-size:12px;opacity:.85;}
-  .topbar a{color:#9fd0ff;font-size:12px;text-decoration:none;margin-left:10px;}
+  .topbar{background:linear-gradient(135deg,#2b2b2b,#3a3f45);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:10;box-shadow:0 2px 8px #0003;}
+  .tb-left{display:flex;align-items:center;gap:10px;}
+  .tb-logo{font-size:22px;background:var(--accent);width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;}
+  .tb-title{font-size:14px;font-weight:800;letter-spacing:.3px;}
+  .tb-sub{font-size:11px;opacity:.75;margin-top:1px;}
+  .tb-actions{display:flex;gap:6px;flex-wrap:wrap;}
+  .tb-btn{background:#ffffff18;border:1px solid #ffffff22;color:#fff;padding:7px 11px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px;transition:.15s;}
+  .tb-btn:hover{background:#ffffff30;transform:translateY(-1px);}
+  .tb-btn span{font-size:9.5px;opacity:.85;}
+  .tb-btn.on{background:#1a7a3c44;border-color:#1a7a3c88;}
+  .tb-btn.salir{background:#a1363644;border-color:#a1363688;}
   .wrap{max-width:1000px;margin:0 auto;padding:16px;}
-  .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px #0001;}
-  h2{font-size:16px;margin:0 0 12px;}
+  .card{background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px #00000012,0 4px 12px #00000008;border:1px solid #e8eaed;}
+  h2{font-size:16px;margin:0 0 14px;display:flex;align-items:center;gap:8px;}
   .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
   .field label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;}
-  .field input, .field select, .field textarea{padding:10px;border:1px solid #ccd1d6;border-radius:6px;font-size:14px;font-family:inherit;}
+  .field input, .field select, .field textarea{padding:11px;border:1px solid #d4d8dc;border-radius:8px;font-size:14px;font-family:inherit;transition:.15s;background:#fbfcfd;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none;border-color:var(--accent2);background:#fff;box-shadow:0 0 0 3px #0f3d5c1a;}
   .field textarea{min-height:60px;resize:vertical;}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
-  .btn{background:var(--accent);color:#fff;border:none;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;width:100%;}
-  .btn.secondary{background:var(--accent2);}
+  .btn{background:var(--accent);color:#fff;border:none;padding:13px 18px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;width:100%;transition:.15s;box-shadow:0 2px 6px #8a1f1f33;}
+  .btn:hover{filter:brightness(1.08);transform:translateY(-1px);}
+  .btn.secondary{background:var(--accent2);box-shadow:0 2px 6px #0f3d5c33;}
   .btn.small{width:auto;padding:8px 14px;font-size:13px;}
-  .btn.ghost{background:#eee;color:#333;}
+  .btn.ghost{background:#eef0f2;color:#333;box-shadow:none;}
+  .btn.ghost:hover{background:#e2e5e8;}
   .checkline{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:10px;}
   .role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-  .role-card{border-radius:10px;padding:20px;text-align:center;cursor:pointer;border:2px solid transparent;box-shadow:0 1px 4px #0001;}
-  .role-card:hover{border-color:var(--accent);}
+  .role-card{border-radius:12px;padding:22px 16px;text-align:center;cursor:pointer;border:2px solid transparent;box-shadow:0 2px 8px #00000014;transition:.18s;}
+  .role-card:hover{transform:translateY(-3px);box-shadow:0 6px 18px #00000022;}
   .role-card .emoji{font-size:28px;}
   .role-card .name{font-weight:700;margin-top:6px;font-size:14px;}
   .role-card.rc-tecnico{background:#f2c94c;color:#1a1a1a;}
@@ -46,13 +56,13 @@
   .role-card.rc-supervisor{background:#8a8f98;color:#fff;}
   .role-card.rc-admin{background:#1a1a1a;color:#fff;}
   .planta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-width:480px;}
-  .planta-card{background:#fff;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;border:2px solid transparent;box-shadow:0 1px 4px #0001;font-weight:700;font-size:12.5px;}
-  .planta-card:hover{border-color:var(--accent2);}
+  .planta-card{background:#fff;border-radius:10px;padding:14px 8px;text-align:center;cursor:pointer;border:2px solid #e2e5e8;box-shadow:0 2px 6px #00000010;font-weight:700;font-size:12.5px;transition:.15s;}
+  .planta-card:hover{border-color:var(--accent2);transform:translateY(-2px);box-shadow:0 5px 14px #00000018;}
   .ubt-cols{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;}
   .ubt-col{display:flex;flex-direction:column;gap:8px;min-width:110px;}
   .ubt-col-title{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:2px;}
-  .ubt-btn{border:none;padding:10px 14px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;text-align:left;}
-  .ubt-btn:hover{opacity:.85;}
+  .ubt-btn{border:none;padding:11px 14px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;text-align:left;transition:.15s;box-shadow:0 2px 5px #00000018;}
+  .ubt-btn:hover{filter:brightness(1.15);transform:translateX(3px);}
   .ubt-btn.p1{background:#1a7a3c;color:#fff;}
   .ubt-btn.p2{background:#1a1a1a;color:#fff;}
   .ubt-btn.p3{background:#0f3d5c;color:#fff;}
@@ -60,7 +70,7 @@
   .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .filters select, .filters input{padding:7px 9px;border:1px solid #ccd1d6;border-radius:6px;font-size:13px;}
   .empty{text-align:center;color:var(--muted);padding:30px;font-size:13px;}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:50;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;z-index:50;box-shadow:0 4px 16px #0004;max-width:90%;text-align:center;}
   .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;}
   .qr-box{text-align:center;border:1px solid #e2e5e8;border-radius:8px;padding:12px;}
   .qr-box .label{font-size:12px;font-weight:700;margin-top:6px;}
@@ -71,6 +81,9 @@
   table.admin-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px;}
   table.admin-tbl th, table.admin-tbl td{border:1px solid #e2e5e8;padding:6px 8px;text-align:left;}
   table.admin-tbl th{background:#f5f6f7;}
+  .badge-est{display:inline-block;padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:700;white-space:nowrap;}
+  .badge-est.act{background:#e3f6e8;color:#1a7a3c;}
+  .badge-est.bloq{background:#fde8e8;color:#a13636;}
   .pass-inline{display:flex;gap:6px;margin-top:6px;}
   .pass-inline input{padding:6px 8px;border:1px solid #ccd1d6;border-radius:5px;font-size:12px;flex:1;}
   .pass-inline button{padding:6px 10px;border:none;border-radius:5px;background:var(--accent2);color:#fff;font-size:12px;font-weight:700;cursor:pointer;}
@@ -242,7 +255,8 @@ async function getUsuario(nombre){
     const r = await sbFetch('usuarios?nombre_slug=eq.'+encodeURIComponent(slug(nombre))+'&select=*');
     if(!r || !r[0]) return null;
     const u = r[0];
-    return { nombre: u.nombre, rol: u.rol, gafete: u.gafete, ubtsPorPlanta: u.ubts_por_planta || {} };
+    const extra = u.ubts_por_planta || {};
+    return { nombre: u.nombre, rol: u.rol, gafete: u.gafete, ubtsPorPlanta: extra.__ubts || extra, bloqueado: !!extra.__bloqueado };
   }catch(e){ console.warn(e); return null; }
 }
 async function saveUsuario(u){
@@ -251,7 +265,7 @@ async function saveUsuario(u){
     prefer: 'resolution=merge-duplicates,return=minimal',
     body: JSON.stringify({
       nombre_slug: slug(u.nombre), nombre: u.nombre, rol: u.rol,
-      gafete: u.gafete, ubts_por_planta: u.ubtsPorPlanta || {}
+      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado }
     })
   });
 }
@@ -261,7 +275,7 @@ async function deleteUsuario(nombre){
 async function listUsuarios(){
   try{
     const r = await sbFetch('usuarios?select=*&order=nombre.asc');
-    return (r||[]).map(u=>({ nombre:u.nombre, rol:u.rol, gafete:u.gafete, ubtsPorPlanta:u.ubts_por_planta||{} }));
+    return (r||[]).map(u=>{ const e=u.ubts_por_planta||{}; return { nombre:u.nombre, rol:u.rol, gafete:u.gafete, ubtsPorPlanta:e.__ubts||e, bloqueado:!!e.__bloqueado }; });
   }catch(e){ console.warn(e); return []; }
 }
 async function getSheet(key){
@@ -318,6 +332,14 @@ async function render(){
 
   if(STATE.nombre && !STATE.usuario){
     STATE.usuario = await getUsuario(STATE.nombre);
+    if(STATE.usuario && STATE.usuario.bloqueado){
+      app.innerHTML = `<div class="wrap"><div class="card" style="text-align:center;">
+        <h2 style="justify-content:center;">🚫 Acceso bloqueado</h2>
+        <p style="font-size:14px;color:var(--muted);">Tu usuario fue bloqueado por el administrador.<br>Contacta a tu supervisor si crees que es un error.</p>
+        <button class="btn ghost" onclick="cambiarRol()">Volver al inicio</button>
+      </div></div>`;
+      return;
+    }
     if(STATE.usuario && pushDisponible() && Notification.permission === 'granted'){
       activarNotificaciones(true);
     }
@@ -366,19 +388,44 @@ function renderTopbar(){
   const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
   const rolesConPlanta = ['tecnico','auditor','apqp'];
   const puedeVerTodo = STATE.rol==='supervisor' || (rolesConPlanta.includes(STATE.rol) && STATE.ubtElegida);
-  return `<div class="topbar no-print"><h1>Correctivo — Lear</h1><div>
-      <span class="who">${ROLES[STATE.rol]?.emoji||''} ${ROLES[STATE.rol]?.label||STATE.rol}${STATE.nombre?(' · '+STATE.nombre):''}${STATE.usuario?.gafete?(' · Gafete '+STATE.usuario.gafete):''}${STATE.plantaHoy?(' · '+STATE.plantaHoy):''}</span>
-      ${esAuditorTipo && STATE.usuario && STATE.plantaHoy && !STATE.viendoTodo ? `<a href="#" onclick="editarUbts();return false;">Editar mis UBTs</a>`:''}
-      ${rolesConPlanta.includes(STATE.rol) && STATE.plantaHoy && !STATE.viendoTodo ? `<a href="#" onclick="cambiarPlanta();return false;">Cambiar planta</a>`:''}
-      ${puedeVerTodo ? (STATE.viendoTodo ? `<a href="#" onclick="volverDeVerTodo();return false;">← Volver</a>` : `<a href="#" onclick="verCorrectivos();return false;">👁️ Ver correctivos${STATE.rol!=='supervisor'?(' de '+STATE.ubtElegida):''}</a>`) : ''}
-      ${STATE.usuario ? `<a href="#" onclick="activarNotificaciones(false);return false;">🔔 Notificaciones</a>` : ''}
-      <a href="#" onclick="cambiarRol();return false;">Cambiar</a>
-    </div></div>`;
+  const notifOn = pushDisponible() && Notification.permission === 'granted';
+  return `<div class="topbar no-print">
+    <div class="tb-left">
+      <span class="tb-logo">🔧</span>
+      <div>
+        <div class="tb-title">Correctivo · Lear</div>
+        <div class="tb-sub">${ROLES[STATE.rol]?.emoji||''} ${ROLES[STATE.rol]?.label||STATE.rol}${STATE.nombre?(' · '+STATE.nombre):''}${STATE.usuario?.gafete?(' · '+STATE.usuario.gafete):''}${STATE.plantaHoy?(' · '+STATE.plantaHoy):''}</div>
+      </div>
+    </div>
+    <div class="tb-actions">
+      <button class="tb-btn" onclick="irInicio()" title="Inicio">🏠<span>Inicio</span></button>
+      <button class="tb-btn" onclick="actualizarDatos()" title="Actualizar">🔄<span>Actualizar</span></button>
+      ${puedeVerTodo && !STATE.viendoTodo ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos">👁️<span>Correctivos</span></button>`:''}
+      ${STATE.viendoTodo ? `<button class="tb-btn" onclick="volverDeVerTodo()">←<span>Volver</span></button>`:''}
+      ${esAuditorTipo && STATE.usuario && STATE.plantaHoy && !STATE.viendoTodo ? `<button class="tb-btn" onclick="editarUbts()" title="Mis UBTs">📋<span>Mis UBTs</span></button>`:''}
+      ${rolesConPlanta.includes(STATE.rol) && STATE.plantaHoy && !STATE.viendoTodo ? `<button class="tb-btn" onclick="cambiarPlanta()" title="Cambiar planta">🏭<span>Planta</span></button>`:''}
+      ${STATE.usuario ? `<button class="tb-btn ${notifOn?'on':''}" onclick="activarNotificaciones(false)" title="Notificaciones">${notifOn?'🔔':'🔕'}<span>Avisos</span></button>` : ''}
+      <button class="tb-btn salir" onclick="cambiarRol()" title="Salir">🚪<span>Salir</span></button>
+    </div>
+  </div>`;
 }
 function editarUbts(){ STATE.editandoUbts = true; render(); }
 function cambiarPlanta(){ STATE.plantaHoy = null; STATE.ubtElegida = null; sheetActivaKey = null; render(); }
 function verCorrectivos(){ STATE.viendoTodo = true; render(); }
 function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
+function irInicio(){
+  STATE.viendoTodo = false; STATE.editandoUbts = false;
+  STATE.ubtElegida = null; sheetActivaKey = null; sheetActivaParams = null;
+  render();
+}
+async function actualizarDatos(){
+  showToast('🔄 Actualizando...');
+  STATE.codes = await getConfig();
+  STATE.plantasCfg = await getPlantasConfig();
+  if(STATE.nombre) STATE.usuario = await getUsuario(STATE.nombre);
+  await render();
+  showToast('Actualizado ✓');
+}
 function cambiarRol(){
   STATE = { rol:'', nombre:'', usuario:null, codes:STATE.codes, plantasCfg:STATE.plantasCfg, editandoUbts:false, plantaHoy:null, ubtElegida:null };
   const url = new URL(window.location.href); url.search=''; window.history.replaceState({}, '', url);
@@ -646,6 +693,11 @@ async function firmarAuditor(sheetKeyStr, filaId){
   if(!fila) return;
   fila.firmaAuditorNombre = STATE.nombre; fila.firmaAuditorFecha = nowLabel(); fila.estadoAuditor = 'firmado';
   await saveSheet(sheetKeyStr, sheet);
+  enviarNotificacion(
+    [slug(fila.tecnico)],
+    '✍️ Tu registro fue firmado',
+    `${STATE.nombre} (Auditor de Calidad) firmó tu reparación en UBT ${sheet.ubtNo} (${sheet.maquina}).`
+  );
   showToast('Firmado ✓'); render();
 }
 
@@ -672,6 +724,11 @@ async function firmarApqp(sheetKeyStr, filaId){
   if(!fila) return;
   fila.firmaAPQPNombre = STATE.nombre; fila.firmaAPQPFecha = nowLabel(); fila.estadoAPQP = 'firmado';
   await saveSheet(sheetKeyStr, sheet);
+  enviarNotificacion(
+    [slug(fila.tecnico)],
+    '✅ APQP firmó tu registro',
+    `${STATE.nombre} (APQP) firmó tu reparación en UBT ${sheet.ubtNo} (${sheet.maquina}).`
+  );
   showToast('Firmado ✓'); render();
 }
 
@@ -752,11 +809,26 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
 
 /* ---------- Imprimir una hoja individual ---------- */
 function imprimirHoja(elId){
-  document.body.classList.add('printing-single');
   const target = document.getElementById(elId);
-  target.classList.add('print-target');
-  window.print();
-  setTimeout(()=>{ document.body.classList.remove('printing-single'); target.classList.remove('print-target'); }, 500);
+  if(!target){ showToast('⚠️ No se encontró la hoja'); return; }
+  const contenido = target.querySelector('.sheet-page');
+  if(!contenido){ showToast('⚠️ No se encontró el formato'); return; }
+
+  const estilos = [...document.querySelectorAll('style')].map(s=>s.outerHTML).join('');
+  const ventana = window.open('', '_blank', 'width=1100,height=800');
+  if(!ventana){ showToast('⚠️ El navegador bloqueó la ventana. Permite ventanas emergentes.'); return; }
+  ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Correctivo</title>${estilos}
+    <style>
+      body{background:#fff;margin:0;padding:10px;}
+      .no-print{display:none !important;}
+      @page{size:letter landscape;margin:8mm;}
+      table.sheet-table{min-width:0 !important;width:100% !important;}
+      .sheet-page{border:none;}
+    </style></head><body>${contenido.outerHTML}</body></html>`);
+  ventana.document.close();
+  ventana.focus();
+  setTimeout(()=>{ ventana.print(); }, 400);
 }
 function renderSheetPrintWrap(sheet, opts){
   const wrapId = 'sw_' + sheet.key.replace(/[^a-z0-9]/gi,'');
@@ -880,12 +952,17 @@ async function renderAdmin(){
   STATE.plantasCfgDraft = JSON.parse(JSON.stringify(STATE.plantasCfg));
   return `
   <div class="card">
-    <h2>Códigos de acceso por rol</h2>
-    ${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`
-      <div class="field"><label>${r.emoji} ${r.label}</label><input id="code_${k}" value="${STATE.codes[k]}"></div>
+    <h2>🔑 Códigos de acceso por rol</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Toca 👁️ para ver u ocultar cada código. Edítalos y guarda.</p>
+    ${Object.entries(ROLES).map(([k,r])=>`
+      <div class="field"><label>${r.emoji} ${r.label}</label>
+        <div style="display:flex;gap:6px;">
+          <input id="code_${k}" type="password" value="${STATE.codes[k]||''}" style="flex:1;">
+          <button class="btn ghost small" onclick="toggleVerCodigo('code_${k}',this)">👁️</button>
+        </div>
+      </div>
     `).join('')}
-    <div class="field"><label>⚙️ Administrador</label><input id="code_admin" value="${STATE.codes.admin}"></div>
-    <button class="btn secondary" onclick="guardarCodigos()">Guardar códigos</button>
+    <button class="btn secondary" onclick="guardarCodigos()">💾 Guardar códigos</button>
   </div>
   <div class="card">
     <h2>UBTs por planta</h2>
@@ -899,24 +976,28 @@ async function renderAdmin(){
     <button class="btn secondary" onclick="guardarPlantas()">Guardar UBTs</button>
   </div>
   <div class="card">
-    <h2>Usuarios registrados (${usuarios.length})</h2>
+    <h2>👥 Usuarios registrados (${usuarios.length})</h2>
     ${usuarios.length===0 ? '<div class="empty">Nadie se ha registrado todavía.</div>' : `
-    <table class="admin-tbl"><thead><tr><th>Nombre</th><th>Rol</th><th>Gafete</th><th>UBTs asignados</th><th></th></tr></thead>
+    <div style="overflow-x:auto;">
+    <table class="admin-tbl"><thead><tr><th>Estado</th><th>Nombre</th><th>Rol</th><th>Gafete</th><th>UBTs asignados</th><th>Acciones</th></tr></thead>
     <tbody>${usuarios.map(u=>{
       const ubtsTxt = u.ubtsPorPlanta ? Object.entries(u.ubtsPorPlanta).filter(([,v])=>v&&v.length).map(([p,v])=>`${p}: ${v.join(', ')}`).join(' · ') : '';
       const uid = slug(u.nombre);
-      return `<tr>
-        <td><input id="au_nombre_${uid}" value="${escapeHtml(u.nombre)}" style="width:120px;padding:4px;font-size:12px;" disabled></td>
-        <td><select id="au_rol_${uid}" style="font-size:12px;padding:4px;" disabled>${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`<option value="${k}" ${u.rol===k?'selected':''}>${r.label}</option>`).join('')}</select></td>
-        <td><input id="au_gafete_${uid}" value="${escapeHtml(u.gafete)}" style="width:90px;padding:4px;font-size:12px;" disabled></td>
-        <td>${ubtsTxt||'—'}</td>
+      const bloqueado = !!u.bloqueado;
+      return `<tr style="${bloqueado?'opacity:.55;background:#fff4f4;':''}">
+        <td>${bloqueado?'<span class="badge-est bloq">🚫 Bloqueado</span>':'<span class="badge-est act">✓ Activo</span>'}</td>
+        <td><input id="au_nombre_${uid}" value="${escapeHtml(u.nombre)}" style="width:120px;padding:5px;font-size:12px;" disabled></td>
+        <td><select id="au_rol_${uid}" style="font-size:12px;padding:5px;" disabled>${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`<option value="${k}" ${u.rol===k?'selected':''}>${r.label}</option>`).join('')}</select></td>
+        <td><input id="au_gafete_${uid}" value="${escapeHtml(u.gafete)}" style="width:90px;padding:5px;font-size:12px;" disabled></td>
+        <td style="font-size:11.5px;">${ubtsTxt||'—'}</td>
         <td style="white-space:nowrap;">
-          <button class="btn ghost small" id="au_editbtn_${uid}" onclick="toggleEditUsuario('${uid}','${u.nombre.replace(/'/g,"\\'")}')">✏️ Editar</button>
-          <button class="btn ghost small" style="color:#a13636;" onclick="confirmarBorrarUsuario(this,'${u.nombre.replace(/'/g,"\\'")}')">🗑 Borrar</button>
+          <button class="btn ghost small" id="au_editbtn_${uid}" onclick="toggleEditUsuario('${uid}','${u.nombre.replace(/'/g,"\\'")}')">✏️</button>
+          <button class="btn ghost small" onclick="toggleBloqueoUsuario('${u.nombre.replace(/'/g,"\\'")}',${bloqueado})">${bloqueado?'🔓':'🔒'}</button>
+          <button class="btn ghost small" style="color:#a13636;" onclick="confirmarBorrarUsuario(this,'${u.nombre.replace(/'/g,"\\'")}')">🗑</button>
         </td>
       </tr>`;
     }).join('')}</tbody>
-    </table>`}
+    </table></div>`}
   </div>
   <div class="card">
     <h2>Códigos QR — automático para todos los registrados</h2>
@@ -925,6 +1006,21 @@ async function renderAdmin(){
   </div>
   <div class="card"><div id="qr_output" class="qr-grid"></div></div>`;
 }
+function toggleVerCodigo(inputId, btn){
+  const el = document.getElementById(inputId);
+  if(el.type === 'password'){ el.type = 'text'; btn.textContent = '🙈'; }
+  else { el.type = 'password'; btn.textContent = '👁️'; }
+}
+
+async function toggleBloqueoUsuario(nombre, estaBloqueado){
+  const u = await getUsuario(nombre);
+  if(!u) return;
+  u.bloqueado = !estaBloqueado;
+  await saveUsuario(u);
+  showToast(u.bloqueado ? '🔒 Usuario bloqueado' : '🔓 Usuario desbloqueado');
+  render();
+}
+
 async function toggleEditUsuario(uid, nombre){
   const btn = document.getElementById('au_editbtn_'+uid);
   const nombreEl = document.getElementById('au_nombre_'+uid);
