@@ -278,7 +278,11 @@ async function sbFetch(path, options={}){
 async function getConfig(){
   try{
     const r = await sbFetch('config?clave=eq.accesscodes&select=valor');
-    return (r && r[0]) ? r[0].valor : { ...DEFAULT_CODES };
+    const guardado = (r && r[0]) ? r[0].valor : {};
+    /* Los roles nuevos que no estén guardados toman su código por defecto */
+    const mezcla = { ...DEFAULT_CODES };
+    Object.entries(guardado).forEach(([k,v])=>{ if(v) mezcla[k] = v; });
+    return mezcla;
   }catch(e){ console.warn(e); return { ...DEFAULT_CODES }; }
 }
 async function saveConfig(cfg){
@@ -1991,6 +1995,39 @@ async function renderAdmin(){
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Tiempo muerto, fallas frecuentes, refacciones y exportación a Excel.</p>
     <button class="btn secondary" onclick="abrirVista('analisis')">Abrir panel de análisis</button>
   </div>
+  <div class="card" style="background:#fffdf5;border-color:#f0c674;">
+    <h2>💡 Probar focos / solicitudes de mantenimiento</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Crea una solicitud de prueba para verificar que a los técnicos les llegue la notificación.</p>
+    <div class="row2">
+      <div class="field"><label>Planta</label>
+        <select id="tf_planta" onchange="actualizarUbtsFocoTest()">${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>UBT</label><select id="tf_ubt"></select></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Máquina o elemento</label><select id="tf_maquina">${maquinasParaFoco().map(m=>`<option>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Nombre del solicitante (simulado)</label><input id="tf_nombre" value="Prueba Admin"></div>
+    </div>
+    <button class="btn" style="background:#e0b400;color:#1a1a1a;" onclick="encenderFocoPrueba()">💡 Encender foco de prueba</button>
+    <div style="margin-top:16px;">
+      <h3 style="font-size:14px;margin:0 0 8px;">Solicitudes activas</h3>
+      <div id="tf_lista"><div class="empty">Cargando...</div></div>
+    </div>
+    <button class="btn ghost" style="margin-top:10px;" onclick="cargarFocosAdmin()">🔄 Actualizar lista</button>
+    <button class="btn ghost" style="margin-top:8px;color:#a13636;" onclick="limpiarFocosPrueba(this)">🗑️ Borrar TODAS las solicitudes</button>
+  </div>
+  <div class="card">
+    <h2>📦 Catálogo de números de parte</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Un número de parte por línea. Puedes copiar y pegar directo desde Excel. Estos aparecerán como sugerencia al llenar correctivos y reportes.<br>
+    Si quieres agregar descripción, sepárala con coma: <code>02P201GFS1, Sensor de mesa</code></p>
+    <div class="field">
+      <textarea id="cat_partes" style="min-height:220px;font-family:monospace;font-size:12.5px;" placeholder="02P201GFS1, Sensor de mesa&#10;02P202GC18, Cable de poder&#10;R59C0"></textarea>
+    </div>
+    <div id="cat_info" style="font-size:12.5px;color:var(--muted);margin-bottom:10px;"></div>
+    <button class="btn secondary" onclick="guardarCatalogoPartes()">💾 Guardar catálogo</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="cargarCatalogoPartes()">🔄 Recargar desde la base</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="exportarCatalogoPartes()">⬇️ Descargar catálogo (CSV)</button>
+  </div>
   <div class="card" style="${STATE.modoPruebas?'background:#fff7e6;border-color:#f0c674;':''}">
     <h2>🧪 Modo pruebas</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Cuando está encendido, se ignoran los horarios de turno: todos reciben notificaciones a cualquier hora y no salen las alertas de fin de jornada. Úsalo solo mientras prueban el sistema.</p>
@@ -2257,7 +2294,16 @@ async function guardarTurnos(){
 
 async function guardarCodigos(){
   const nuevos = {};
-  Object.keys(ROLES).forEach(k=>{ const el = document.getElementById('code_'+k); if(el) nuevos[k] = el.value; });
+  let vacios = [];
+  Object.keys(ROLES).forEach(k=>{
+    const el = document.getElementById('code_'+k);
+    if(el){
+      const val = el.value.trim();
+      if(!val){ vacios.push(ROLES[k].label); nuevos[k] = DEFAULT_CODES[k] || ''; }
+      else nuevos[k] = val;
+    }
+  });
+  if(vacios.length){ showToast('⚠️ Se usó el código por defecto para: ' + vacios.join(', ')); }
   STATE.codes = nuevos;
   await saveConfig(nuevos);
   showToast('Códigos actualizados ✓');
