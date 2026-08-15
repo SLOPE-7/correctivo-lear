@@ -316,7 +316,12 @@ async function render(){
     return;
   }
 
-  if(STATE.nombre && !STATE.usuario){ STATE.usuario = await getUsuario(STATE.nombre); }
+  if(STATE.nombre && !STATE.usuario){
+    STATE.usuario = await getUsuario(STATE.nombre);
+    if(STATE.usuario && pushDisponible() && Notification.permission === 'granted'){
+      activarNotificaciones(true);
+    }
+  }
   const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
   const necesitaGafete = STATE.nombre && !STATE.usuario;
   if(necesitaGafete){
@@ -366,6 +371,7 @@ function renderTopbar(){
       ${esAuditorTipo && STATE.usuario && STATE.plantaHoy && !STATE.viendoTodo ? `<a href="#" onclick="editarUbts();return false;">Editar mis UBTs</a>`:''}
       ${rolesConPlanta.includes(STATE.rol) && STATE.plantaHoy && !STATE.viendoTodo ? `<a href="#" onclick="cambiarPlanta();return false;">Cambiar planta</a>`:''}
       ${puedeVerTodo ? (STATE.viendoTodo ? `<a href="#" onclick="volverDeVerTodo();return false;">← Volver</a>` : `<a href="#" onclick="verCorrectivos();return false;">👁️ Ver correctivos${STATE.rol!=='supervisor'?(' de '+STATE.ubtElegida):''}</a>`) : ''}
+      ${STATE.usuario ? `<a href="#" onclick="activarNotificaciones(false);return false;">🔔 Notificaciones</a>` : ''}
       <a href="#" onclick="cambiarRol();return false;">Cambiar</a>
     </div></div>`;
 }
@@ -437,6 +443,7 @@ async function guardarGafete(){
     showToast('⚠️ No se pudo guardar: ' + (err.message||String(err)));
     return;
   }
+  await activarNotificaciones(false);
   render();
 }
 
@@ -590,6 +597,25 @@ async function agregarFila(){
   sheet.filas.push(fila);
   try{ await saveSheet(sheetActivaKey, sheet); }
   catch(err){ showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
+
+  /* Notificar al auditor de calidad asignado a este UBT */
+  const auditores = await destinatariosPara('auditor', sheet.planta, sheet.ubtNo);
+  enviarNotificacion(
+    auditores,
+    '🔧 Reparación pendiente de tu firma',
+    `${STATE.nombre} realizó una reparación en UBT ${sheet.ubtNo} (${sheet.maquina}). Necesita tu firma como Auditor de Calidad.`
+  );
+
+  /* Si se solicitó APQP, notificar también al APQP asignado */
+  if(solicitarApqp){
+    const apqps = await destinatariosPara('apqp', sheet.planta, sheet.ubtNo);
+    enviarNotificacion(
+      apqps,
+      '✅ Firma de APQP solicitada',
+      `${STATE.nombre} solicitó tu firma en UBT ${sheet.ubtNo} (${sheet.maquina}).`
+    );
+  }
+
   showToast('Registro guardado y notificado ✓');
   /* Regresa a la ventana de todas las UBT de la planta */
   sheetActivaKey = null;
@@ -1004,6 +1030,83 @@ async function renderQRCodes(){
     box.appendChild(label); output.appendChild(box);
     new QRCode(qrDiv, { text: url, width: 130, height: 130 });
   });
+}
+
+/* ---------- Notificaciones Push ---------- */
+const VAPID_PUBLIC_KEY = 'BHO00CHONm3Uf0MIaOVAI9SxsAyMd_0hctC7TqKTl5Vpn4Jh1IHBZbHX4PM1fAV2uPr9ZdsmsIW_MaeDBkxmsSg';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+function pushDisponible(){
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+async function activarNotificaciones(silencioso){
+  if(!pushDisponible()){
+    if(!silencioso) showToast('⚠️ Este dispositivo no soporta notificaciones push');
+    return false;
+  }
+  try{
+    const permiso = await Notification.requestPermission();
+    if(permiso !== 'granted'){
+      if(!silencioso) showToast('⚠️ No diste permiso para notificaciones');
+      return false;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+    const json = sub.toJSON();
+    await sbFetch('suscripciones?on_conflict=endpoint', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+      body: JSON.stringify({
+        usuario_slug: slug(STATE.nombre),
+        rol: STATE.rol,
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth
+      })
+    });
+    if(!silencioso) showToast('🔔 Notificaciones activadas ✓');
+    return true;
+  }catch(err){
+    console.warn('Error activando notificaciones:', err);
+    if(!silencioso) showToast('⚠️ No se pudo activar: ' + (err.message||err));
+    return false;
+  }
+}
+
+async function enviarNotificacion(destinatarios, titulo, cuerpo){
+  if(!destinatarios || destinatarios.length===0) return;
+  try{
+    await fetch(SUPABASE_URL + '/functions/v1/enviar-notificacion', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'apikey': SUPABASE_KEY
+      },
+      body: JSON.stringify({ destinatarios, titulo, cuerpo })
+    });
+  }catch(err){ console.warn('No se pudo enviar la notificación:', err); }
+}
+
+/* Busca qué auditores/APQP tienen asignado este UBT en esta planta */
+async function destinatariosPara(rolBuscado, planta, ubt){
+  const usuarios = await listUsuarios();
+  return usuarios
+    .filter(u => u.rol===rolBuscado && ((u.ubtsPorPlanta||{})[planta]||[]).includes(ubt))
+    .map(u => slug(u.nombre));
 }
 
 /* ---------- Registro del Service Worker (necesario para instalación y push) ---------- */
