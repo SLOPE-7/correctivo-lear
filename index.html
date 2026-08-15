@@ -1292,6 +1292,7 @@ async function renderAdmin(){
       <input id="base_url" value="${window.location.origin + window.location.pathname}">
     </div>
     <button class="btn secondary" onclick="generarQRRoles()">🔑 Generar QR por rol (4)</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="imprimirTodosQR('qr_roles','QR de acceso por rol')">🖨️ Imprimir todos (1x1 pulgada)</button>
     <div id="qr_roles" class="qr-grid" style="margin-top:14px;"></div>
   </div>
   <div class="card">
@@ -1305,11 +1306,13 @@ async function renderAdmin(){
     </div>
     <button class="btn secondary" onclick="generarQRUbt()">Generar QR de esta UBT</button>
     <button class="btn ghost" style="margin-top:8px;" onclick="generarQRTodasUbts()">Generar QR de TODAS las UBT de esta planta</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="imprimirTodosQR('qr_ubts','QR por UBT')">🖨️ Imprimir todos (1x1 pulgada, 5mm de separación)</button>
     <div id="qr_ubts" class="qr-grid" style="margin-top:14px;"></div>
   </div>
   <div class="card">
     <h2>👤 QR personales (por usuario registrado)</h2>
     <button class="btn secondary" onclick="renderQRCodes()">Generar QR personales</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="imprimirTodosQR('qr_output','QR personales')">🖨️ Imprimir todos (1x1 pulgada)</button>
     <div id="qr_output" class="qr-grid" style="margin-top:14px;"></div>
   </div>`;
 }
@@ -1444,16 +1447,62 @@ function imprimirQR(qrDiv, titulo, subtitulo){
   const v = window.open('', '_blank', 'width=500,height=650');
   if(!v){ showToast('⚠️ Permite ventanas emergentes'); return; }
   v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
-    <style>body{font-family:Arial,sans-serif;text-align:center;padding:30px;}
-    h1{font-size:22px;margin:0 0 4px;} h2{font-size:15px;font-weight:400;color:#555;margin:0 0 20px;}
-    img{width:300px;height:300px;} .pie{margin-top:18px;font-size:13px;color:#555;}
-    @page{margin:15mm;}</style></head><body>
-    <h1>${titulo}</h1><h2>${subtitulo||''}</h2>
-    <img src="${src}">
-    <div class="pie">Escanea con la cámara de tu teléfono</div>
-    </body></html>`);
+    <style>
+      @page{margin:10mm;}
+      body{font-family:Arial,sans-serif;margin:0;padding:0;}
+      .etiqueta{width:1.6in;text-align:center;padding:2mm;box-sizing:border-box;}
+      .etiqueta .t{font-size:8pt;font-weight:bold;line-height:1.1;margin-bottom:1mm;}
+      .etiqueta .s{font-size:6.5pt;color:#555;margin-bottom:1mm;}
+      .etiqueta img{width:1in;height:1in;display:block;margin:0 auto;}
+      .etiqueta .p{font-size:5.5pt;color:#666;margin-top:1mm;}
+    </style></head><body>
+    <div class="etiqueta">
+      <div class="t">${titulo}</div>
+      <div class="s">${subtitulo||''}</div>
+      <img src="${src}">
+      <div class="p">Escanea con la cámara</div>
+    </div></body></html>`);
   v.document.close(); v.focus();
   setTimeout(()=>v.print(), 500);
+}
+
+/* Imprime en hoja todos los QR generados, en etiquetas de 1x1 pulgada separadas 5mm */
+function imprimirTodosQR(contenedorId, tituloDoc){
+  const cont = document.getElementById(contenedorId);
+  if(!cont){ return; }
+  const cajas = [...cont.querySelectorAll('.qr-box')];
+  if(cajas.length === 0){ showToast('⚠️ Genera los QR primero'); return; }
+
+  const etiquetas = cajas.map(box=>{
+    const img = box.querySelector('img') || box.querySelector('canvas');
+    let src = '';
+    if(img && img.tagName === 'IMG') src = img.src;
+    else if(img) src = img.toDataURL();
+    const label = box.querySelector('.label');
+    const titulo = label ? (label.childNodes[0]?.textContent || '').trim() : '';
+    const sub = label ? (label.querySelector('span')?.textContent || '') : '';
+    return `<div class="etiqueta">
+      <div class="t">${titulo}</div>
+      <div class="s">${sub}</div>
+      <img src="${src}">
+    </div>`;
+  }).join('');
+
+  const v = window.open('', '_blank', 'width=900,height=800');
+  if(!v){ showToast('⚠️ Permite ventanas emergentes'); return; }
+  v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${tituloDoc}</title>
+    <style>
+      @page{size:letter portrait;margin:10mm;}
+      body{font-family:Arial,sans-serif;margin:0;padding:0;
+        display:flex;flex-wrap:wrap;gap:5mm;align-content:flex-start;}
+      .etiqueta{width:1.25in;text-align:center;box-sizing:border-box;
+        page-break-inside:avoid;break-inside:avoid;}
+      .etiqueta .t{font-size:7.5pt;font-weight:bold;line-height:1.1;}
+      .etiqueta .s{font-size:6pt;color:#555;margin-bottom:1mm;}
+      .etiqueta img{width:1in;height:1in;display:block;margin:0 auto;}
+    </style></head><body>${etiquetas}</body></html>`);
+  v.document.close(); v.focus();
+  setTimeout(()=>v.print(), 600);
 }
 
 function generarQRRoles(){
