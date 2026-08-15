@@ -394,7 +394,7 @@ async function render(){
 
   if(STATE.viendoTodo){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVerCorrectivos()}</div>`;
-    setTimeout(filtrarVerTodo, 50);
+    setTimeout(()=>{ limpiarAutorelleno(['vt_filtro_ubt'], [ubtEsperado()]); filtrarVerTodo(); }, 60);
     return;
   }
 
@@ -404,6 +404,14 @@ async function render(){
     return;
   }
   if(STATE.vista === 'reportar' && STATE.rol==='tecnico'){
+    if(!STATE.plantaHoy){
+      app.innerHTML = renderTopbar() + `<div class="wrap"><div class="card">
+        <h2>📢 Reportar al Supervisor</h2>
+        <p style="font-size:13.5px;">Primero elige en qué planta estás trabajando.</p>
+        <div class="planta-grid">${PLANTA_NOMBRES.map(p=>`<div class="planta-card" onclick="elegirPlantaHoy('${p.replace(/'/g,"\\'")}')">${p}</div>`).join('')}</div>
+      </div></div>`;
+      return;
+    }
     app.innerHTML = renderTopbar() + `<div class="wrap">${renderReportarFalla()}</div>`;
     setTimeout(()=>{ cargarMisReportes(); cargarListaPartesRp(); }, 50);
     return;
@@ -442,7 +450,7 @@ async function render(){
     body = `<div class="card"><h2>⚠️ Error</h2><p style="font-size:13px;color:var(--muted);">${escapeHtml(err.message||String(err))}</p></div>`;
   }
   app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap">${body}</div>`;
-  if(STATE.rol==='supervisor') setTimeout(filtrarSupervisor, 50);
+  if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
   if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(cargarListaPartes, 50);
 }
 
@@ -463,7 +471,7 @@ function renderTopbar(){
       <button class="tb-btn" onclick="irInicio()" title="Inicio">🏠<span>Inicio</span></button>
       <button class="tb-btn" onclick="actualizarDatos()" title="Actualizar">🔄<span>Actualizar</span></button>
       ${puedeVerTodo && !STATE.viendoTodo && !STATE.vista ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos">👁️<span>Correctivos</span></button>`:''}
-      ${STATE.rol==='tecnico' && STATE.plantaHoy && !STATE.viendoTodo ? `<button class="tb-btn ${STATE.vista==='reportar'?'on':''}" onclick="abrirVista('reportar')" title="Reportar al supervisor">📢<span>Reportar</span></button>`:''}
+      ${STATE.rol==='tecnico' ? `<button class="tb-btn ${STATE.vista==='reportar'?'on':''}" style="background:#c7770044;border-color:#c7770088;" onclick="abrirVista('reportar')" title="Reportar falla al supervisor">📢<span>Reportar</span></button>`:''}
       ${['tecnico','supervisor'].includes(STATE.rol) ? `<button class="tb-btn ${STATE.vista==='analisis'?'on':''}" onclick="abrirVista('analisis')" title="Reportes y análisis">📊<span>Análisis</span></button>`:''}
       ${STATE.rol==='supervisor' ? `<button class="tb-btn ${STATE.vista==='buzon'?'on':''}" onclick="abrirVista('buzon')" title="Reportes recibidos">📬<span>Buzón</span></button>`:''}
       ${STATE.viendoTodo ? `<button class="tb-btn" onclick="volverDeVerTodo()">←<span>Volver</span></button>`:''}
@@ -807,6 +815,11 @@ async function renderTecnico(){
       <button class="btn" onclick="agregarFila()">Guardar registro y notificar</button>
       `}
     </div>
+    <div class="card" style="background:#fff8ee;border-color:#f0c674;">
+      <h2>📢 ¿Necesitas avisar algo al Supervisor?</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Máquina dañada, refacción agotada o cualquier anomalía.</p>
+      <button class="btn secondary" onclick="abrirVista('reportar')">Reportar falla o refacción</button>
+    </div>
     <div class="card"><h2>Hoja actual</h2>${renderSheetPrintWrap(sheet, {role:'tecnico'})}</div>`;
 }
 
@@ -865,6 +878,7 @@ async function agregarFila(){
     seMovioModulo: document.getElementById('f_movio').checked,
     seVerificoModulo: document.getElementById('f_verifico').checked,
     tecnico: STATE.nombre,
+    firmaTecnicoImg: (STATE.usuario?.modoFirma==='dibujo' && STATE.usuario?.firma) ? STATE.usuario.firma : '',
     firmaAuditorNombre:'', firmaAuditorFecha:'',
     firmaAPQPNombre:'', firmaAPQPFecha:'',
     estadoAuditor: 'pendiente',
@@ -1046,8 +1060,8 @@ async function renderVerCorrectivos(){
   return `<div class="card"><h2>👁️ Ver correctivos — solo lectura</h2>
     ${esAuditorTipo ? `<p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Solo se muestran tus líneas asignadas${misUbtsTxt?(' → '+escapeHtml(misUbtsTxt)):''}.</p>` : ''}
     <div class="filters">
-      <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()" autocomplete="off" autocorrect="off" spellcheck="false" name="vt_pl_x">
-      <input id="vt_filtro_ubt" placeholder="Filtrar por UBT" value="${escapeHtml(ubtDefault)}" oninput="filtrarVerTodo()" autocomplete="off" autocorrect="off" spellcheck="false" name="vt_ubt_x">
+      <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" name="zzv_pl">
+      <input id="vt_filtro_ubt" placeholder="Filtrar por UBT" value="${escapeHtml(ubtDefault)}" oninput="filtrarVerTodo()" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" name="zzv_ubt">
     </div>
     <button class="btn ghost small" style="margin-bottom:10px;" onclick="limpiarFiltrosVt()">✖ Limpiar filtros</button>
     <div id="vt_lista"></div>
@@ -1078,8 +1092,8 @@ async function renderSupervisor(){
   sheetsCache = await listSheets();
   return `<div class="card"><h2>Todas las hojas (solo lectura)</h2>
     <div class="filters">
-      <input id="filtro_planta" placeholder="Filtrar por planta" oninput="filtrarSupervisor()" autocomplete="off" autocorrect="off" spellcheck="false" name="f_pl_x">
-      <input id="filtro_ubt" placeholder="Filtrar por UBT" oninput="filtrarSupervisor()" autocomplete="off" autocorrect="off" spellcheck="false" name="f_ubt_x">
+      <input id="filtro_planta" placeholder="Filtrar por planta" oninput="filtrarSupervisor()" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" name="zzq_pl">
+      <input id="filtro_ubt" placeholder="Filtrar por UBT" oninput="filtrarSupervisor()" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" name="zzq_ubt">
     </div>
     <button class="btn ghost small" style="margin-bottom:10px;" onclick="limpiarFiltrosSup()">✖ Limpiar filtros</button>
     <div id="lista_sup"></div>
@@ -1238,7 +1252,7 @@ function renderSheetVisual(sheet, opts){
       return `<tr>
         <td>${f.fecha||''}</td><td>${escapeHtml(f.gafete)}</td><td>${f.horaInicio||''}</td><td>${f.horaFinal||''}</td>
         <td class="left">${escapeHtml(f.sintomas)}${f.minutosParo?`<br><span style="color:#0f3d5c;font-size:8px;">⏱️ ${formatoDuracion(f.minutosParo)}</span>`:''}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:8px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td><td class="left">${escapeHtml(f.acciones)}</td><td class="left">${escapeHtml(f.material)}${f.numeroParte?`<br><span style="font-size:8px;color:#0f3d5c;"><b>P/N:</b> ${escapeHtml(f.numeroParte)}</span>`:''}</td>
-        <td>${escapeHtml(f.tecnico)}</td><td>${auditorCell}</td><td>${f.seMovioModulo?'Sí':'No'}</td><td>${f.seVerificoModulo?'Sí':'No'}</td><td>${apqpCell}</td>
+        <td>${f.firmaTecnicoImg?`<img src="${f.firmaTecnicoImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.tecnico)}</span>`:escapeHtml(f.tecnico)}</td><td>${auditorCell}</td><td>${f.seMovioModulo?'Sí':'No'}</td><td>${f.seVerificoModulo?'Sí':'No'}</td><td>${apqpCell}</td>
         <td class="no-print">
           <button class="edit-btn" onclick="pedirClaveEditar('${sheet.key}','${f.id}')">✏️ Editar</button>
           <div class="pass-inline" id="editpass_${f.id}" style="display:none;">
@@ -1833,6 +1847,17 @@ function verFoto(id){
   if(el) el.style.display = el.style.display==='none' ? 'block' : 'none';
 }
 
+/* Borra valores que el navegador haya autorellenado en los filtros */
+function ubtEsperado(){ return STATE.rol!=='supervisor' ? (STATE.ubtElegida||'') : ''; }
+function limpiarAutorelleno(ids, permitidos){
+  ids.forEach((id,i)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    const esperado = permitidos ? (permitidos[i]||'') : '';
+    if(el.value !== esperado && /^\d{5,}$/.test(el.value)) el.value = esperado;
+  });
+}
+
 /* ---------- Validación de tiempos ---------- */
 function validarTiempos(){
   const fEl=document.getElementById('f_fecha'), hiEl=document.getElementById('f_hi'), hfEl=document.getElementById('f_hf');
@@ -2097,7 +2122,12 @@ async function renderAnalisis(){
 
 function todasLasFilas(){
   const out = [];
-  (cacheAnalisis||[]).forEach(h => (h.filas||[]).forEach(f => out.push({...f, planta:h.planta, ubtNo:h.ubtNo, maquina:h.maquina, mes:h.mes, anio:h.anio})));
+  (cacheAnalisis||[]).forEach(h => (h.filas||[]).forEach(f => {
+    const min = (typeof f.minutosParo === 'number' && f.minutosParo > 0)
+      ? f.minutosParo
+      : minutosEntre(f.horaInicio, f.horaFinal);
+    out.push({...f, minutosParo: min, planta:h.planta, ubtNo:h.ubtNo, maquina:h.maquina, mes:h.mes, anio:h.anio});
+  }));
   return out;
 }
 
@@ -2135,34 +2165,64 @@ function calcularTiempoMuerto(){
   if(planta) filas = filas.filter(f=>f.planta===planta);
   if(mes) filas = filas.filter(f=>f.mes===mes);
 
-  const porMaquina = {};
+  if(filas.length === 0){ cont.innerHTML = '<div class="empty">Sin datos para este filtro.</div>'; return; }
+
+  /* Agrupar: Planta > UBT > Máquina */
+  const arbol = {};
   filas.forEach(f=>{
-    const clave = `${f.maquina} · UBT ${f.ubtNo}`;
-    porMaquina[clave] ??= { minutos:0, paros:0, planta:f.planta };
-    porMaquina[clave].minutos += (f.minutosParo||0);
-    porMaquina[clave].paros++;
+    const min = f.minutosParo||0;
+    arbol[f.planta] ??= { minutos:0, paros:0, ubts:{} };
+    arbol[f.planta].minutos += min; arbol[f.planta].paros++;
+    arbol[f.planta].ubts[f.ubtNo] ??= { minutos:0, paros:0, maquinas:{} };
+    arbol[f.planta].ubts[f.ubtNo].minutos += min; arbol[f.planta].ubts[f.ubtNo].paros++;
+    arbol[f.planta].ubts[f.ubtNo].maquinas[f.maquina] ??= { minutos:0, paros:0 };
+    arbol[f.planta].ubts[f.ubtNo].maquinas[f.maquina].minutos += min;
+    arbol[f.planta].ubts[f.ubtNo].maquinas[f.maquina].paros++;
   });
 
-  const lista = Object.entries(porMaquina).sort((a,b)=>b[1].minutos-a[1].minutos);
-  if(lista.length === 0){ cont.innerHTML = '<div class="empty">Sin datos para este filtro.</div>'; return; }
+  const totalMin = filas.reduce((a,f)=>a+(f.minutosParo||0),0);
+  const plantasOrd = Object.entries(arbol).sort((a,b)=>b[1].minutos-a[1].minutos);
+  const maxPlanta = plantasOrd[0][1].minutos || 1;
 
-  const totalMin = lista.reduce((a,[,v])=>a+v.minutos,0);
-  const maxMin = lista[0][1].minutos || 1;
+  const barra = (min, max, color) => `<div style="background:#e8eaed;border-radius:20px;height:8px;overflow:hidden;margin-top:3px;">
+      <div style="background:${color};height:100%;width:${(min/max*100).toFixed(1)}%;"></div></div>`;
 
   cont.innerHTML = `
-    <div style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13.5px;">
-      Total de paro: <b>${formatoDuracion(totalMin)}</b> en <b>${filas.length}</b> intervención(es)
+    <div style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13.5px;">
+      Total de paro: <b>${formatoDuracion(totalMin)}</b> (${totalMin} min) en <b>${filas.length}</b> intervención(es)
     </div>
-    ${lista.slice(0,20).map(([maq,v],i)=>`
-      <div style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
-          <span><b>${i+1}.</b> ${escapeHtml(maq)}</span>
-          <span style="font-weight:700;">${formatoDuracion(v.minutos)} <span style="font-weight:400;color:var(--muted);">(${v.paros} paro/s)</span></span>
+    ${plantasOrd.map(([pl, dPl])=>{
+      const ubtsOrd = Object.entries(dPl.ubts).sort((a,b)=>b[1].minutos-a[1].minutos);
+      const maxUbt = ubtsOrd[0][1].minutos || 1;
+      return `<details open style="margin-bottom:10px;">
+        <summary style="cursor:pointer;padding:10px 12px;background:#2f3742;color:#fff;border-radius:8px;font-weight:700;font-size:13.5px;">
+          🏭 ${escapeHtml(pl)} — ${formatoDuracion(dPl.minutos)} (${dPl.minutos} min) · ${dPl.paros} paro/s
+        </summary>
+        ${barra(dPl.minutos, maxPlanta, '#a13636')}
+        <div style="padding:10px 0 0 12px;">
+          ${ubtsOrd.map(([ub, dUb])=>{
+            const maqOrd = Object.entries(dUb.maquinas).sort((a,b)=>b[1].minutos-a[1].minutos);
+            const maxMaq = maqOrd[0][1].minutos || 1;
+            return `<details open style="margin-bottom:8px;">
+              <summary style="cursor:pointer;padding:7px 10px;background:#eef1f4;border-radius:7px;font-weight:600;font-size:13px;">
+                📍 UBT ${escapeHtml(ub)} — ${formatoDuracion(dUb.minutos)} (${dUb.minutos} min) · ${dUb.paros} paro/s
+              </summary>
+              ${barra(dUb.minutos, maxUbt, '#c77700')}
+              <div style="padding:8px 0 0 12px;">
+                ${maqOrd.map(([mq, dMq], i)=>`
+                  <div style="margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;font-size:12.5px;">
+                      <span>⚙️ ${escapeHtml(mq)}</span>
+                      <span style="font-weight:700;">${formatoDuracion(dMq.minutos)} <span style="font-weight:400;color:var(--muted);">(${dMq.minutos} min · ${dMq.paros} paro/s)</span></span>
+                    </div>
+                    ${barra(dMq.minutos, maxMaq, i===0?'#a13636':'#0f3d5c')}
+                  </div>`).join('')}
+              </div>
+            </details>`;
+          }).join('')}
         </div>
-        <div style="background:#e8eaed;border-radius:20px;height:9px;overflow:hidden;">
-          <div style="background:${i<3?'#a13636':'#0f3d5c'};height:100%;width:${(v.minutos/maxMin*100).toFixed(1)}%;"></div>
-        </div>
-      </div>`).join('')}`;
+      </details>`;
+    }).join('')}`;
 }
 
 function calcularFallasFrecuentes(){
