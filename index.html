@@ -103,6 +103,40 @@
   .ubt-row input{flex:1;padding:6px 8px;border:1px solid #ccd1d6;border-radius:5px;font-size:12.5px;}
   .ubt-row button{padding:5px 9px;border:none;border-radius:5px;background:#e2e5e8;cursor:pointer;font-size:12px;}
 
+  /* --- Pantalla principal (menu de mosaicos) --- */
+  .menu-hero{background:linear-gradient(135deg,#2b2b2b,#3a3f45);color:#fff;border-radius:14px;padding:18px 18px 16px;margin-bottom:14px;box-shadow:0 2px 10px #0000001f;}
+  .menu-hero .mh-kick{font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.6px;font-weight:700;}
+  .menu-hero .mh-name{font-size:20px;font-weight:800;margin-top:2px;}
+  .menu-hero .mh-sub{font-size:12.5px;opacity:.82;margin-top:4px;}
+  .menu-hero .mh-est{margin-top:12px;background:#ffffff1a;border:1px solid #ffffff26;border-radius:10px;padding:10px 12px;font-size:13px;}
+  .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  .menu-tile{background:#fff;border:1px solid #e2e5e8;border-radius:14px;padding:18px 10px;text-align:center;cursor:pointer;box-shadow:0 2px 8px #00000012;transition:.15s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:120px;font-family:inherit;color:var(--ink);width:100%;}
+  .menu-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px #00000022;}
+  .menu-tile:active{transform:translateY(0);}
+  .menu-tile .ico{font-size:34px;line-height:1;}
+  .menu-tile .txt{font-weight:800;font-size:14.5px;line-height:1.15;}
+  .menu-tile .sub{font-size:11px;color:var(--muted);line-height:1.2;}
+  .menu-tile.wide{grid-column:span 2;}
+  .menu-tile.rojo{background:linear-gradient(135deg,#8a1f1f,#a13636);color:#fff;border:none;}
+  .menu-tile.verde{background:linear-gradient(135deg,#1a7a3c,#146030);color:#fff;border:none;}
+  .menu-tile.ambar{background:linear-gradient(135deg,#e8c02a,#c77700);color:#1a1a1a;border:none;}
+  .menu-tile.azul{background:linear-gradient(135deg,#0f3d5c,#18567f);color:#fff;border:none;}
+  .menu-tile.gris{background:#40454b;color:#fff;border:none;}
+  .menu-tile.salida{background:#fdecec;border-color:#f0c0c0;color:#a13636;}
+  .menu-tile.rojo .sub,.menu-tile.verde .sub,.menu-tile.azul .sub,.menu-tile.gris .sub{color:#ffffffc4;}
+  .menu-tile.ambar .sub{color:#1a1a1ab0;}
+  @media(max-width:560px){ .menu-grid{grid-template-columns:1fr 1fr;} }
+  /* --- Linea de estado de solicitud --- */
+  .paso{display:flex;align-items:flex-start;gap:9px;padding:7px 0;font-size:13px;}
+  .paso .bolita{width:20px;height:20px;border-radius:50%;flex:0 0 20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;}
+  .paso.ok .bolita{background:#1a7a3c;color:#fff;}
+  .paso.no .bolita{background:#e2e5e8;color:#8a9099;}
+  .paso.no{color:var(--muted);}
+  .badge-est.esp{background:#fff4d6;color:#a16d07;}
+  .badge-est.fin{background:#e8eff5;color:#0f3d5c;}
+  .dato-fijo{padding:11px;border:1px dashed #c9ced4;border-radius:8px;background:#f5f7f9;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .dato-fijo .lock{font-size:12px;opacity:.55;font-weight:600;}
+
   .sheet-print-wrap{margin-bottom:16px;}
   .sheet-page{border:1px solid #333;padding:14px;background:#fff;font-size:11px;overflow-x:auto;}
   .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:6px;margin-bottom:8px;}
@@ -479,6 +513,10 @@ async function render(){
 
   if(STATE.rol==='admin'){
     if(!STATE.adminOk){ app.innerHTML = renderTopbar() + renderAdminLogin(); return; }
+    if(STATE.vista === 'menu'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${renderMenuInicio()}</div>`;
+      return;
+    }
     if(STATE.vista === 'analisis'){
       app.innerHTML = renderTopbar() + `<div class="wrap"><div class="card"><button class="btn ghost small" onclick="abrirVista('analisis')">← Volver al panel</button></div>${await renderAnalisis()}</div>`;
       setTimeout(()=>{ calcularTiempoMuerto(); calcularFallasFrecuentes(); cargarRefaccionesAnalisis(); }, 60);
@@ -509,6 +547,26 @@ async function render(){
     return;
   }
 
+  /* El operador siempre trae fija su UBT asignada (no la puede cambiar) */
+  if(STATE.rol==='produccion' && STATE.plantaHoy && STATE.usuario){
+    const subA = STATE.usuario.subrol || 'operador';
+    if(!SUBROLES_PROD[subA]?.multiUbt){
+      const asig = (STATE.usuario.ubtsPorPlanta||{})[STATE.plantaHoy] || [];
+      if(asig.length && !STATE.ubtElegida) STATE.ubtElegida = asig[0];
+    }
+  }
+
+  /* Pantalla principal de mosaicos */
+  if(STATE.vista === 'menu'){
+    const necesitaPlanta = ['tecnico','auditor','apqp','produccion'].includes(STATE.rol);
+    const listoProd = STATE.rol!=='produccion' || ((STATE.usuario?.ubtsPorPlanta||{})[STATE.plantaHoy]||[]).length>0;
+    if((!necesitaPlanta || STATE.plantaHoy) && listoProd){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${renderMenuInicio()}</div>`;
+      if(STATE.rol==='produccion') setTimeout(cargarEstadoMenu, 80);
+      return;
+    }
+  }
+
   if(STATE.viendoTodo){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVerCorrectivos()}</div>`;
     setTimeout(()=>{ limpiarAutorelleno(['vt_filtro_ubt'], [ubtEsperado()]); filtrarVerTodo(); }, 60);
@@ -535,6 +593,7 @@ async function render(){
   }
   if(STATE.vista === 'foco' && ['produccion'].includes(STATE.rol)){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderFoco()}</div>`;
+    iniciarAutoRefrescoFoco();
     return;
   }
   if(STATE.vista === 'tpm_suplencia' && STATE.rol==='produccion'){
@@ -664,15 +723,117 @@ function restaurarBorradorRegistro(){
 
 function abrirVista(v){
   if(v==='reportar' && document.getElementById('f_sintomas')) guardarBorradorRegistro();
+  pararAutoRefrescoFoco();
   STATE.vista = (STATE.vista===v) ? null : v;
   STATE.viendoTodo=false;
   render();
 }
 function irInicio(){
+  STATE.vista = 'menu';
+  STATE.viendoTodo = false; STATE.editandoUbts = false;
+  sheetActivaKey = null; sheetActivaParams = null;
+  if(STATE.rol !== 'produccion') STATE.ubtElegida = null;
+  pararAutoRefrescoFoco();
+  render();
+}
+/* Ir a la pantalla de trabajo del rol (lo que antes hacia el boton Inicio) */
+function irAPanel(){
   STATE.vista = null;
   STATE.viendoTodo = false; STATE.editandoUbts = false;
-  STATE.ubtElegida = null; sheetActivaKey = null; sheetActivaParams = null;
+  pararAutoRefrescoFoco();
   render();
+}
+function saludoHora(){
+  const h = new Date().getHours();
+  if(h < 12) return 'Buenos días';
+  if(h < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
+/* ---------- Pantalla principal: mosaicos grandes ---------- */
+function renderMenuInicio(){
+  const rol = STATE.rol;
+  const sub = STATE.usuario?.subrol || '';
+  const infoSub = SUBROLES_PROD[sub];
+  const esOperador = rol==='produccion' && (sub==='operador' || !sub);
+  const esAuditorTipo = rol==='auditor' || rol==='apqp';
+  const t = [];
+  const T = (cls,ico,txt,subt,onclick)=>t.push(`<button class="menu-tile ${cls}" onclick="${onclick}"><span class="ico">${ico}</span><span class="txt">${txt}</span>${subt?`<span class="sub">${subt}</span>`:''}</button>`);
+
+  if(rol==='tecnico'){
+    T('rojo wide','📝','Llenar correctivo','Registrar una falla en la hoja','irAPanel()');
+    T('ambar','💡','Focos','Solicitudes de producción',"abrirVista('solicitudes')");
+    T('gris','📢','Reportar','Avisar al supervisor',"abrirVista('reportar')");
+    T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
+    T('','👁️','Ver correctivos','Solo lectura','verCorrectivos()');
+    if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
+  }
+  else if(rol==='produccion'){
+    T('verde wide','💡','Solicitar mantenimiento','Encender el foco de tu línea',"abrirVista('foco')");
+    T('rojo','📋','TPM diario',esOperador?'Llenar mi checklist':'Estado de mis líneas','irAPanel()');
+    if(infoSub?.multiUbt) T('','📌','Mis UBTs','Líneas asignadas','editarUbts()');
+    if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
+  }
+  else if(esAuditorTipo){
+    T('rojo wide','👁️','Ver correctivos','Hojas de mis líneas','verCorrectivos()');
+    T('','📋','Mis UBTs','Líneas asignadas','editarUbts()');
+    T('','🏠','Mi panel','Pendientes de firma','irAPanel()');
+    if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
+  }
+  else if(rol==='supervisor'){
+    T('rojo wide','🏠','Mi panel','Resumen de hojas','irAPanel()');
+    T('ambar','📬','Buzón','Reportes recibidos',"abrirVista('buzon')");
+    T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
+    T('','👁️','Ver correctivos','Todas las plantas','verCorrectivos()');
+  }
+  else if(rol==='admin'){
+    T('rojo wide','⚙️','Panel de administración','Usuarios, plantas, turnos','irAPanel()');
+    T('azul','📊','Análisis','Reportes generales',"abrirVista('analisis')");
+  }
+
+  T('','🔄','Actualizar','Traer datos nuevos','actualizarDatos()');
+  if(STATE.usuario) T('','✍️','Mi firma','Guardar o cambiar',"abrirVista('firma')");
+  if(STATE.usuario){
+    const notifOn = pushDisponible() && Notification.permission === 'granted';
+    T('','' + (notifOn?'🔔':'🔕'),'Avisos',notifOn?'Activados':'Desactivados','activarNotificaciones(false)');
+  }
+  T('salida','🚪','Salir','Cerrar sesión','cambiarRol()');
+
+  const etiquetaRol = esOperador||infoSub ? (infoSub?.label || 'Producción') : (ROLES[rol]?.label || rol);
+  const linea = [
+    (ROLES[rol]?.emoji||'') + ' ' + etiquetaRol,
+    STATE.plantaHoy || '',
+    (rol==='produccion' && STATE.ubtElegida) ? ('UBT ' + STATE.ubtElegida) : '',
+    (rol==='produccion' && esOperador && STATE.usuario?.maquina) ? STATE.usuario.maquina : '',
+    STATE.usuario?.turno ? ('Turno ' + STATE.usuario.turno) : ''
+  ].filter(Boolean).map(escapeHtml).join(' · ');
+
+  return `
+  <div class="menu-hero">
+    <div class="mh-kick">Pantalla principal</div>
+    <div class="mh-name">${saludoHora()}${STATE.nombre?(', '+escapeHtml(STATE.nombre)):''}</div>
+    <div class="mh-sub">${linea}</div>
+    ${rol==='produccion' ? '<div class="mh-est" id="menu_estado">💡 Revisando tus solicitudes...</div>' : ''}
+  </div>
+  <div class="menu-grid">${t.join('')}</div>`;
+}
+
+async function cargarEstadoMenu(){
+  const z = document.getElementById('menu_estado');
+  if(!z || !STATE.plantaHoy) return;
+  const todas = await listSolicitudesRecientes(STATE.plantaHoy);
+  const mias = todas.filter(x=>slug(x.solicitante)===slug(STATE.nombre) && x.estado!=='terminada');
+  if(mias.length===0){
+    z.innerHTML = '✅ No tienes solicitudes de mantenimiento abiertas.';
+    return;
+  }
+  z.innerHTML = mias.map(s=>{
+    if(s.estado==='atendida'){
+      return `🔧 <b>UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b> — recibida por ${escapeHtml(s.atendido_por||'un técnico')}, va en camino.`;
+    }
+    const min = minutosDesde(s.creado_en);
+    return `💡 <b>UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b> — enviada hace ${min} min, <span style="color:#ffd9a0;">aún sin recibir</span>.`;
+  }).join('<br>') + `<div style="margin-top:8px;"><button class="btn small" style="background:#e0b400;color:#1a1a1a;" onclick="abrirVista('foco')">Ver detalle</button></div>`;
 }
 async function actualizarDatos(){
   showToast('🔄 Actualizando...');
@@ -1304,6 +1465,14 @@ async function listSolicitudes(soloPendientes){
     return await sbFetch(q) || [];
   }catch(e){ return []; }
 }
+/* Solicitudes de las ultimas 24 h de una planta (incluye atendidas y terminadas) */
+async function listSolicitudesRecientes(planta){
+  const desde = new Date(Date.now() - 24*60*60*1000).toISOString();
+  try{
+    const q = `solicitudes?creado_en=gte.${desde}&planta=eq.${encodeURIComponent(planta)}&select=*&order=creado_en.desc`;
+    return await sbFetch(q) || [];
+  }catch(e){ return []; }
+}
 async function saveSolicitud(sol){
   await sbFetch('solicitudes?on_conflict=id', {
     method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
@@ -1326,8 +1495,11 @@ async function renderProduccion(){
     </div>`;
   }
 
-  const pendientes = await listSolicitudes(true);
-  const misPend = pendientes.filter(x=>x.planta===STATE.plantaHoy);
+  const todasSol = await listSolicitudesRecientes(STATE.plantaHoy);
+  const misPend = todasSol.filter(x=>x.estado!=='terminada');
+  const miasAbiertas = misPend.filter(x=>slug(x.solicitante)===slug(STATE.nombre));
+  const miaRecibida = miasAbiertas.find(x=>x.estado==='atendida');
+  const miaEsperando = miasAbiertas.find(x=>x.estado==='pendiente');
 
   return `
   <div class="card" style="background:linear-gradient(135deg,#1a7a3c,#146030);color:#fff;">
@@ -1345,10 +1517,16 @@ async function renderProduccion(){
   <div class="card" style="text-align:center;">
     <h2 style="justify-content:center;">💡 Foco de Mantenimiento</h2>
     <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Solicita ayuda de un técnico para tu línea.</p>
-    <button onclick="abrirVista('foco')" style="background:${misPend.length?'#e0b400':'#f0f2f4'};border:3px solid ${misPend.length?'#c77700':'#d4d8dc'};border-radius:50%;width:120px;height:120px;font-size:52px;cursor:pointer;transition:.2s;box-shadow:${misPend.length?'0 0 26px #e0b40088':'none'};">💡</button>
-    <div style="margin-top:12px;font-size:13.5px;font-weight:700;color:${misPend.length?'#c77700':'var(--muted)'};">
-      ${misPend.length ? `${misPend.length} solicitud(es) activa(s) en tu planta` : 'Toca el foco para solicitar mantenimiento'}
-    </div>
+    <button onclick="abrirVista('foco')" style="background:${miaRecibida?'#1a7a3c':(miasAbiertas.length?'#e0b400':'#f0f2f4')};border:3px solid ${miaRecibida?'#146030':(miasAbiertas.length?'#c77700':'#d4d8dc')};border-radius:50%;width:120px;height:120px;font-size:52px;cursor:pointer;transition:.2s;box-shadow:${miasAbiertas.length?(miaRecibida?'0 0 26px #1a7a3c88':'0 0 26px #e0b40088'):'none'};">${miaRecibida?'🔧':'💡'}</button>
+    ${miasAbiertas.length ? `
+      <div style="margin-top:12px;display:inline-block;text-align:left;background:${miaRecibida?'#f4faf5':'#fffdf5'};border:1px solid ${miaRecibida?'#cfe3d4':'#f0c674'};border-radius:10px;padding:11px 14px;font-size:13px;max-width:420px;">
+        ${miaRecibida ? `<b style="color:#1a7a3c;">✓ Tu solicitud fue recibida</b><br>Técnico <b>${escapeHtml(miaRecibida.atendido_por||'')}</b> · UBT ${escapeHtml(miaRecibida.ubt_no)} · ${escapeHtml(miaRecibida.maquina)}`
+          : `<b style="color:#a16d07;">● Enviada, aún sin recibir</b><br>Hace ${minutosDesde(miaEsperando.creado_en)} min · UBT ${escapeHtml(miaEsperando.ubt_no)} · ${escapeHtml(miaEsperando.maquina)}`}
+        <div style="margin-top:7px;"><button class="btn ghost small" onclick="abrirVista('foco')">Ver detalle</button></div>
+      </div>`
+      : `<div style="margin-top:12px;font-size:13.5px;font-weight:700;color:${misPend.length?'#c77700':'var(--muted)'};">
+        ${misPend.length ? `${misPend.length} solicitud(es) activa(s) en tu planta` : 'Toca el foco para solicitar mantenimiento'}
+      </div>`}
   </div>`;
 }
 
@@ -1522,27 +1700,125 @@ function prepararTpmSuplencia(){
 }
 
 /* ---------- Foco de mantenimiento ---------- */
+function esOperadorProd(){
+  const sub = STATE.usuario?.subrol || 'operador';
+  return STATE.rol==='produccion' && sub==='operador';
+}
+
 async function renderFoco(){
-  const pendientes = (await listSolicitudes(true)).filter(x=>x.planta===STATE.plantaHoy);
-  const mias = pendientes.filter(x=>x.solicitante===STATE.nombre);
-  const ubtsDisp = (STATE.usuario?.subrol==='operador') ? [STATE.ubtElegida] : misUbtsProd();
+  const todas = await listSolicitudesRecientes(STATE.plantaHoy);
+  const activas = todas.filter(x=>x.estado!=='terminada');
+  const mias = todas.filter(x=>slug(x.solicitante)===slug(STATE.nombre));
+  const miasAbiertas = mias.filter(x=>x.estado!=='terminada');
+  const soloOperador = esOperadorProd();
+  const ubtsDisp = soloOperador ? [STATE.ubtElegida] : misUbtsProd();
+  const maqFija = STATE.usuario?.maquina || '';
+
+  const bloqueSolicitar = soloOperador ? `
+    <div class="row2">
+      <div class="field"><label>UBT</label>
+        <div class="dato-fijo">📍 ${escapeHtml(STATE.ubtElegida||'')} <span class="lock">· fija</span></div>
+        <input type="hidden" id="fo_ubt" value="${escapeHtml(STATE.ubtElegida||'')}">
+      </div>
+      <div class="field"><label>Máquina</label>
+        <div class="dato-fijo">⚙️ ${escapeHtml(maqFija)} <span class="lock">· fija</span></div>
+        <input type="hidden" id="fo_maquina" value="${escapeHtml(maqFija)}">
+      </div>
+    </div>
+    <p style="font-size:11.5px;color:var(--muted);margin:-4px 0 12px;">Tu línea y tu máquina ya están asignadas. Si necesitas cambiarlas, avisa a tu líder o supervisor.</p>
+  ` : `
+    <div class="row2">
+      <div class="field"><label>UBT</label><select id="fo_ubt">${ubtsDisp.map(u=>`<option>${escapeHtml(u)}</option>`).join('')}</select></div>
+      <div class="field"><label>Máquina o elemento</label><select id="fo_maquina">${maquinasParaFoco().map(m=>`<option>${escapeHtml(m)}</option>`).join('')}</select></div>
+    </div>`;
 
   return `
-  <div class="card"><button class="btn ghost small" onclick="abrirVista('foco')">← Volver</button></div>
+  <div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+
+  <div class="card" id="zona_mis_solicitudes">${renderMisSolicitudes(mias)}</div>
+
   <div class="card">
     <h2>💡 Solicitar Mantenimiento</h2>
-    <div class="row2">
-      <div class="field"><label>UBT</label><select id="fo_ubt">${ubtsDisp.map(u=>`<option>${u}</option>`).join('')}</select></div>
-      <div class="field"><label>Máquina o elemento</label><select id="fo_maquina">${maquinasParaFoco().map(m=>`<option>${m}</option>`).join('')}</select></div>
-    </div>
+    ${miasAbiertas.length ? `<div style="background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:9px 11px;font-size:12.5px;margin-bottom:12px;">Ya tienes ${miasAbiertas.length} solicitud(es) abierta(s). Envía otra solo si es una falla distinta.</div>` : ''}
+    ${bloqueSolicitar}
     <div class="field"><label>Nota (opcional)</label><textarea id="fo_nota" placeholder="Describe brevemente qué ocurre..."></textarea></div>
     <button class="btn" style="background:#e0b400;color:#1a1a1a;" onclick="encenderFoco()">💡 Encender foco y solicitar mantenimiento</button>
   </div>
-  <div class="card">
-    <h2>🔆 Solicitudes activas en ${escapeHtml(STATE.plantaHoy)} (${pendientes.length})</h2>
-    ${pendientes.length===0 ? '<div class="empty">Sin solicitudes activas.</div>' :
-      pendientes.map(s=>tarjetaSolicitud(s,false)).join('')}
+
+  <div class="card" id="zona_activas">${renderActivasPlanta(activas)}</div>`;
+}
+
+function renderMisSolicitudes(mias){
+  const abiertas = mias.filter(x=>x.estado!=='terminada');
+  const cerradas = mias.filter(x=>x.estado==='terminada').slice(0,3);
+  return `<h2>📨 Mis solicitudes</h2>
+    ${abiertas.length===0 ? '<div class="empty">No tienes solicitudes abiertas.<br>Si tu línea necesita un técnico, enciende el foco abajo.</div>'
+      : abiertas.map(tarjetaMiSolicitud).join('')}
+    ${cerradas.length ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;">Terminadas hoy: ${cerradas.map(s=>escapeHtml(s.maquina)+' ('+escapeHtml(s.terminado_por||s.atendido_por||'')+')').join(' · ')}</div>` : ''}`;
+}
+
+function renderActivasPlanta(activas){
+  return `<h2>🔆 Solicitudes activas en ${escapeHtml(STATE.plantaHoy)} (${activas.length})</h2>
+    ${activas.length===0 ? '<div class="empty">Sin solicitudes activas.</div>' :
+      activas.map(s=>tarjetaSolicitud(s,false)).join('')}`;
+}
+
+/* Tarjeta con la linea de estado, para que el solicitante sepa si ya la recibieron */
+function tarjetaMiSolicitud(s){
+  const min = minutosDesde(s.creado_en);
+  const recibida = s.estado==='atendida' || s.estado==='terminada';
+  const terminada = s.estado==='terminada';
+  const tarde = !recibida && min >= 10;
+  const color = terminada ? '#0f3d5c' : (recibida ? '#1a7a3c' : (tarde ? '#a13636' : '#a16d07'));
+  const fondo = terminada ? '#eef4f8' : (recibida ? '#f4faf5' : (tarde ? '#fdf1f1' : '#fffdf5'));
+  const borde = terminada ? '#bcd4e4' : (recibida ? '#cfe3d4' : (tarde ? '#e9b7b7' : '#f0c674'));
+  const paso = (ok,txt)=>`<div class="paso ${ok?'ok':'no'}"><span class="bolita">${ok?'✓':'•'}</span><span>${txt}</span></div>`;
+  return `
+  <div style="border:1px solid ${borde};border-left:5px solid ${color};background:${fondo};border-radius:10px;padding:14px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;">
+      <b style="font-size:14.5px;">${terminada?'🏁':(recibida?'🔧':'💡')} UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b>
+      <span class="badge-est ${terminada?'fin':(recibida?'act':'esp')}">${terminada?'Terminada':(recibida?'Recibida':'Esperando técnico')}</span>
+    </div>
+    ${s.nota?`<div style="font-size:12.5px;color:var(--muted);margin-top:5px;">${escapeHtml(s.nota)}</div>`:''}
+    <div style="margin-top:10px;border-top:1px dashed ${borde};padding-top:6px;">
+      ${paso(true, `Enviada · hace ${min} min`)}
+      ${paso(recibida, recibida
+          ? `Recibida por <b>${escapeHtml(s.atendido_por||'un técnico')}</b>${s.atendido_en?` · hace ${minutosDesde(s.atendido_en)} min`:''}`
+          : (tarde ? `<b style="color:#a13636;">Todavía nadie la recibe (${min} min)</b> — se les está recordando` : 'Aún no la recibe ningún técnico'))}
+      ${paso(terminada, terminada
+          ? `Trabajo terminado por <b>${escapeHtml(s.terminado_por||s.atendido_por||'')}</b>`
+          : 'Trabajo sin terminar')}
+    </div>
+    ${!recibida ? `<button class="btn ghost small" style="margin-top:10px;" onclick="cancelarMiFoco('${s.id}')">✖ Ya no la necesito</button>` : ''}
   </div>`;
+}
+
+/* Auto refresco del estado mientras el operador está en la pantalla del foco */
+let intervaloFoco = null;
+function iniciarAutoRefrescoFoco(){
+  pararAutoRefrescoFoco();
+  intervaloFoco = setInterval(refrescarFoco, 20000);
+}
+function pararAutoRefrescoFoco(){
+  if(intervaloFoco){ clearInterval(intervaloFoco); intervaloFoco = null; }
+}
+async function refrescarFoco(){
+  const z1 = document.getElementById('zona_mis_solicitudes');
+  const z2 = document.getElementById('zona_activas');
+  if(!z1 && !z2){ pararAutoRefrescoFoco(); return; }
+  if(STATE.vista !== 'foco'){ pararAutoRefrescoFoco(); return; }
+  const todas = await listSolicitudesRecientes(STATE.plantaHoy);
+  if(z1) z1.innerHTML = renderMisSolicitudes(todas.filter(x=>slug(x.solicitante)===slug(STATE.nombre)));
+  if(z2) z2.innerHTML = renderActivasPlanta(todas.filter(x=>x.estado!=='terminada'));
+}
+
+async function cancelarMiFoco(id){
+  if(!confirm('¿Cancelar esta solicitud de mantenimiento?')) return;
+  try{
+    await sbFetch('solicitudes?id=eq.'+encodeURIComponent(id), { method:'DELETE', prefer:'return=minimal' });
+    showToast('Solicitud cancelada');
+  }catch(e){ showToast('⚠️ No se pudo cancelar'); }
+  refrescarFoco();
 }
 
 function minutosDesde(iso){
@@ -1551,18 +1827,25 @@ function minutosDesde(iso){
 
 function tarjetaSolicitud(s, esTecnico){
   const min = minutosDesde(s.creado_en);
+  const terminada = s.estado === 'terminada';
   const atendida = s.estado === 'atendida';
+  const color = terminada ? '#0f3d5c' : (atendida ? '#1a7a3c' : '#e0b400');
+  const fondo = terminada ? '#eef4f8' : (atendida ? '#f4faf5' : '#fffdf5');
+  const borde = terminada ? '#bcd4e4' : (atendida ? '#cfe3d4' : '#f0c674');
+  const etiqueta = terminada ? ('Terminada por '+escapeHtml(s.terminado_por||s.atendido_por||''))
+                 : (atendida ? ('Recibida por '+escapeHtml(s.atendido_por||'')) : ('Sin recibir · hace '+min+' min'));
   return `
-  <div style="border:1px solid ${atendida?'#cfe3d4':'#f0c674'};background:${atendida?'#f4faf5':'#fffdf5'};border-left:5px solid ${atendida?'#1a7a3c':'#e0b400'};border-radius:10px;padding:14px;margin-bottom:10px;">
+  <div style="border:1px solid ${borde};background:${fondo};border-left:5px solid ${color};border-radius:10px;padding:14px;margin-bottom:10px;">
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-      <b style="font-size:14px;">${atendida?'✅':'💡'} UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b>
-      <span class="badge-est ${atendida?'act':'bloq'}">${atendida?('Atendida por '+escapeHtml(s.atendido_por||'')):('Hace '+min+' min')}</span>
+      <b style="font-size:14px;">${terminada?'🏁':(atendida?'🔧':'💡')} UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b>
+      <span class="badge-est ${terminada?'fin':(atendida?'act':'esp')}">${etiqueta}</span>
     </div>
     <div style="font-size:12px;color:var(--muted);margin-top:4px;">
       Solicitó: <b>${escapeHtml(s.solicitante)}</b>${s.rol_solicitante?(' ('+escapeHtml(SUBROLES_PROD[s.rol_solicitante]?.label||s.rol_solicitante)+')'):''} · ${escapeHtml(s.planta)} · Turno ${escapeHtml(s.turno||'')}
     </div>
     ${s.nota?`<div style="font-size:13px;margin-top:8px;">${escapeHtml(s.nota)}</div>`:''}
-    ${esTecnico && !atendida ? `<button class="btn small" style="margin-top:10px;background:#e0b400;color:#1a1a1a;" onclick="atenderFoco('${s.id}')">💡 Atender esta solicitud</button>` : ''}
+    ${esTecnico && !atendida && !terminada ? `<button class="btn small" style="margin-top:10px;background:#e0b400;color:#1a1a1a;" onclick="atenderFoco('${s.id}')">💡 Recibir esta solicitud</button>` : ''}
+    ${esTecnico && atendida ? `<button class="btn small secondary" style="margin-top:10px;" onclick="terminarFoco('${s.id}')">🏁 Marcar trabajo terminado</button>` : ''}
   </div>`;
 }
 
@@ -1612,8 +1895,8 @@ async function atenderFoco(id){
   await saveSolicitud(s);
 
   /* Avisar a quien solicitó */
-  enviarNotificacion([slug(s.solicitante)], '💡 Solicitud atendida',
-    `El Técnico ${STATE.nombre} atenderá tu petición en la UBT ${s.ubt_no} (${s.maquina}).`);
+  enviarNotificacion([slug(s.solicitante)], '🔧 Tu solicitud fue recibida',
+    `El Técnico ${STATE.nombre} recibió tu solicitud de la UBT ${s.ubt_no} (${s.maquina}) y va en camino.`);
 
   /* Avisar a los demás técnicos */
   const usuarios = await listUsuarios();
@@ -1621,7 +1904,27 @@ async function atenderFoco(id){
   enviarNotificacion(otros, '💡 Solicitud tomada',
     `Tu compañero ${STATE.nombre} atenderá la solicitud de la UBT ${s.ubt_no}.`);
 
-  showToast('✓ Solicitud tomada');
+  showToast('✓ Solicitud recibida — se avisó al solicitante');
+  render();
+}
+
+async function terminarFoco(id){
+  const todas = await listSolicitudes(false);
+  const s = todas.find(x=>x.id===id);
+  if(!s) return;
+  if(s.estado === 'terminada'){ showToast('Ya estaba marcada como terminada'); render(); return; }
+
+  s.estado = 'terminada';
+  /* Solo se mandan estas columnas si existen en la tabla */
+  if('terminado_por' in s) s.terminado_por = STATE.nombre;
+  if('terminado_en' in s) s.terminado_en = new Date().toISOString();
+  try{ await saveSolicitud(s); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+
+  enviarNotificacion([slug(s.solicitante)], '🏁 Trabajo terminado',
+    `${STATE.nombre} terminó el trabajo en la UBT ${s.ubt_no} (${s.maquina}). El foco se apagó.`);
+
+  showToast('🏁 Solicitud terminada');
   render();
 }
 
@@ -1656,18 +1959,25 @@ async function revisarRecordatorios(){
 
 /* ---------- Bloque del técnico: solicitudes de mantenimiento ---------- */
 async function renderSolicitudesTecnico(){
-  const pendientes = (await listSolicitudes(true));
-  const recientes = (await listSolicitudes(false)).filter(x=>x.estado==='atendida').slice(0,10);
+  const todas = await listSolicitudes(false);
+  const pendientes = todas.filter(x=>x.estado!=='atendida' && x.estado!=='terminada');
+  const enProceso = todas.filter(x=>x.estado==='atendida');
+  const terminadas = todas.filter(x=>x.estado==='terminada').slice(0,10);
   return `
-  <div class="card"><button class="btn ghost small" onclick="abrirVista('solicitudes')">← Volver</button></div>
+  <div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
   <div class="card" style="${pendientes.length?'background:#fffdf5;border-color:#f0c674;':''}">
-    <h2>💡 Solicitudes de mantenimiento (${pendientes.length})</h2>
+    <h2>💡 Sin recibir (${pendientes.length})</h2>
     ${pendientes.length===0 ? '<div class="empty">No hay solicitudes pendientes. ✓</div>' :
       pendientes.map(s=>tarjetaSolicitud(s,true)).join('')}
   </div>
   <div class="card">
-    <h2>✅ Atendidas recientemente</h2>
-    ${recientes.length===0 ? '<div class="empty">Sin registros.</div>' : recientes.map(s=>tarjetaSolicitud(s,false)).join('')}
+    <h2>🔧 En proceso (${enProceso.length})</h2>
+    <p style="font-size:12px;color:var(--muted);margin-top:-8px;">Al marcar terminado se apaga el foco y se avisa a quien lo solicitó.</p>
+    ${enProceso.length===0 ? '<div class="empty">Sin trabajos en proceso.</div>' : enProceso.map(s=>tarjetaSolicitud(s,true)).join('')}
+  </div>
+  <div class="card">
+    <h2>🏁 Terminadas recientemente</h2>
+    ${terminadas.length===0 ? '<div class="empty">Sin registros.</div>' : terminadas.map(s=>tarjetaSolicitud(s,false)).join('')}
   </div>`;
 }
 
