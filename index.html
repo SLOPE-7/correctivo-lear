@@ -449,8 +449,13 @@ async function render(){
 
   if(STATE.rol==='admin'){
     if(!STATE.adminOk){ app.innerHTML = renderTopbar() + renderAdminLogin(); return; }
+    if(STATE.vista === 'analisis'){
+      app.innerHTML = renderTopbar() + `<div class="wrap"><div class="card"><button class="btn ghost small" onclick="abrirVista('analisis')">← Volver al panel</button></div>${await renderAnalisis()}</div>`;
+      setTimeout(()=>{ calcularTiempoMuerto(); calcularFallasFrecuentes(); cargarRefaccionesAnalisis(); }, 60);
+      return;
+    }
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
-    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); }, 50);
+    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); cargarCatalogoPartes(); }, 50);
     return;
   }
 
@@ -534,7 +539,7 @@ async function render(){
   app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap"><div id="banner_jornada" class="no-print" style="display:none;border-radius:10px;padding:14px;margin-bottom:14px;"></div>${avisoEntradaAnticipada()}${body}</div>`;
   setTimeout(iniciarVigilanciaJornada, 100);
   if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
-  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(cargarListaPartes, 50);
+  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); }, 60);
 }
 
 function renderTopbar(){
@@ -571,7 +576,41 @@ function editarUbts(){ STATE.editandoUbts = true; render(); }
 function cambiarPlanta(){ STATE.plantaHoy = null; STATE.ubtElegida = null; sheetActivaKey = null; render(); }
 function verCorrectivos(){ STATE.viendoTodo = true; render(); }
 function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
-function abrirVista(v){ STATE.vista = (STATE.vista===v) ? null : v; STATE.viendoTodo=false; render(); }
+function guardarBorradorRegistro(){
+  const ids = ['f_fecha','f_hi','f_hf','f_gafete','f_sintomas','f_acciones','f_material','f_parte','f_parte_desc','f_turno'];
+  const chk = ['f_movio','f_verifico','f_solicitar_apqp','f_extra'];
+  const b = {};
+  let hayAlgo = false;
+  ids.forEach(id=>{ const el=document.getElementById(id); if(el){ b[id]=el.value; if(['f_sintomas','f_acciones','f_material'].includes(id) && el.value.trim()) hayAlgo=true; } });
+  chk.forEach(id=>{ const el=document.getElementById(id); if(el) b[id]=el.checked; });
+  if(hayAlgo){ b.__foto = fotoTemp || ''; STATE.borradorRegistro = b; }
+}
+function restaurarBorradorRegistro(){
+  const b = STATE.borradorRegistro;
+  if(!b) return;
+  Object.entries(b).forEach(([id,val])=>{
+    if(id.startsWith('__')) return;
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.type === 'checkbox') el.checked = !!val; else el.value = val;
+  });
+  if(b.__foto){
+    fotoTemp = b.__foto;
+    const c = document.getElementById('prev_foto');
+    if(c) c.innerHTML = `<img src="${b.__foto}" style="max-width:200px;border-radius:8px;border:1px solid #ddd;">
+      <button class="btn ghost small" style="margin-left:8px;" onclick="quitarFoto('f_foto','prev_foto')">✖ Quitar</button>`;
+  }
+  validarTiempos();
+  showToast('✓ Se recuperó lo que tenías escrito');
+  STATE.borradorRegistro = null;
+}
+
+function abrirVista(v){
+  if(v==='reportar' && document.getElementById('f_sintomas')) guardarBorradorRegistro();
+  STATE.vista = (STATE.vista===v) ? null : v;
+  STATE.viendoTodo=false;
+  render();
+}
 function irInicio(){
   STATE.vista = null;
   STATE.viendoTodo = false; STATE.editandoUbts = false;
@@ -918,13 +957,10 @@ async function renderTecnico(){
       <label class="checkline"><input type="checkbox" id="f_verifico"> Se verificó módulo quede en cuadrante especificado</label>
       <label class="checkline"><input type="checkbox" id="f_solicitar_apqp"> 📩 Solicitar firma de APQP (le da acceso a este registro)</label>
       <button class="btn" onclick="agregarFila()">Guardar registro y notificar</button>
+      <button class="btn ghost" style="margin-top:8px;" onclick="abrirVista('reportar')">📢 ¿Necesitas reportar algo al Supervisor? (opcional)</button>
       `}
     </div>
-    <div class="card" style="background:#fff8ee;border-color:#f0c674;">
-      <h2>📢 ¿Necesitas avisar algo al Supervisor?</h2>
-      <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Máquina dañada, refacción agotada o cualquier anomalía.</p>
-      <button class="btn secondary" onclick="abrirVista('reportar')">Reportar falla o refacción</button>
-    </div>
+
     <div class="card"><h2>Hoja actual</h2>${renderSheetPrintWrap(sheet, {role:'tecnico'})}</div>`;
 }
 
@@ -1435,7 +1471,7 @@ async function renderAdmin(){
         const delRol = usuarios.filter(u=>u.rol===rolKey);
         if(delRol.length===0) return '';
         return `
-        <details open style="margin-bottom:12px;">
+        <details style="margin-bottom:12px;">
           <summary style="cursor:pointer;font-weight:700;font-size:13.5px;padding:8px 10px;background:#eef1f4;border-radius:8px;">
             ${rolInfo.emoji} ${rolInfo.label} (${delRol.length})
           </summary>
@@ -1603,6 +1639,46 @@ async function eliminarUsuario(nombre){
   await deleteUsuario(nombre);
   showToast('Usuario eliminado ✓');
   render();
+}
+
+async function cargarCatalogoPartes(){
+  const ta = document.getElementById('cat_partes');
+  const info = document.getElementById('cat_info');
+  if(!ta) return;
+  const refs = await listRefacciones();
+  ta.value = refs.map(r=>r.descripcion ? `${r.numero_parte}, ${r.descripcion}` : r.numero_parte).join('\n');
+  if(info) info.textContent = `${refs.length} número(s) de parte en el catálogo.`;
+}
+
+async function guardarCatalogoPartes(){
+  const ta = document.getElementById('cat_partes');
+  if(!ta) return;
+  const lineas = ta.value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(lineas.length === 0){ showToast('⚠️ El catálogo está vacío'); return; }
+  showToast(`Guardando ${lineas.length} número(s)...`);
+  let ok = 0;
+  for(const linea of lineas){
+    const partes = linea.split(',');
+    const numero = partes[0].trim();
+    const desc = partes.slice(1).join(',').trim();
+    if(!numero) continue;
+    try{
+      await sbFetch('refacciones?on_conflict=numero_parte', {
+        method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+        body: JSON.stringify({ numero_parte:numero, descripcion:desc, ultima_vez:new Date().toISOString() })
+      });
+      ok++;
+    }catch(e){ console.warn(e); }
+  }
+  showToast(`✓ ${ok} número(s) de parte guardados`);
+  cargarCatalogoPartes();
+}
+
+async function exportarCatalogoPartes(){
+  const refs = await listRefacciones();
+  const filas = [['No. de Parte','Descripcion','Veces usada','Ultima vez']];
+  refs.forEach(r=>filas.push([r.numero_parte, r.descripcion||'', r.veces_usada||0, r.ultima_vez?new Date(r.ultima_vez).toLocaleDateString('es-MX'):'']));
+  descargarCSV('catalogo-refacciones-'+todayISO()+'.csv', filas);
 }
 
 async function alternarModoPruebas(){
@@ -1973,16 +2049,7 @@ document.addEventListener('input', e => {
   }
 });
 
-function ajustarHoraFinal(){
-  const hi = document.getElementById('f_hi');
-  const hf = document.getElementById('f_hf');
-  if(!hi || !hf || !hi.value) return;
-  const [h,m] = hi.value.split(':').map(Number);
-  const d = new Date(2000,0,1,h,m+1);
-  const minimo = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-  hf.min = minimo;
-  if(hf.value && hf.value < minimo) hf.value = minimo;
-}
+function ajustarHoraFinal(){ /* la hora final se deja libre; se valida al guardar */ }
 
 function limpiarFiltrosSup(){
   const a=document.getElementById('filtro_planta'), b=document.getElementById('filtro_ubt');
@@ -2133,11 +2200,13 @@ function validarTiempos(){
 
   if(fEl.value > hoy){ fEl.value = hoy; mostrar('⚠️ No se pueden registrar fechas futuras. Se ajustó a hoy.','error'); return false; }
 
-  /* Si es hoy, no permitir horas futuras */
+  /* Si es hoy, avisar (sin modificar) cuando la hora es futura */
+  let hayFutura = false;
   if(fEl.value === hoy){
-    if(hiEl.value && hiEl.value > horaAhora){ hiEl.value = horaAhora; mostrar('⚠️ La hora de inicio no puede ser futura. Se ajustó a la hora actual.','error'); }
-    if(hfEl.value && hfEl.value > horaAhora){ hfEl.value = horaAhora; mostrar('⚠️ La hora final no puede ser futura. Se ajustó a la hora actual.','error'); }
+    if(hiEl.value && hiEl.value > horaAhora) hayFutura = true;
+    if(hfEl.value && hfEl.value > horaAhora) hayFutura = true;
   }
+  if(hayFutura) mostrar('⚠️ Estás registrando una hora futura. Verifica que sea correcta.','warn');
 
   const tEl = document.getElementById('f_turno');
   if(tEl && hiEl.value && !tEl.dataset.manual) tEl.value = turnoDeHora(hiEl.value);
@@ -2223,7 +2292,7 @@ async function registrarRefaccion(numeroParte, descripcion){
     const veces = (existente && existente[0]) ? (existente[0].veces_usada||0)+1 : 1;
     await sbFetch('refacciones?on_conflict=numero_parte', {
       method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-      body: JSON.stringify({ numero_parte:numeroParte, descripcion: descripcion||((existente&&existente[0])?existente[0].descripcion:''), veces_usada:veces, ultima_vez:new Date().toISOString() })
+      body: JSON.stringify({ numero_parte:numeroParte, descripcion: ((existente&&existente[0]&&existente[0].descripcion)?existente[0].descripcion:(descripcion||'')), veces_usada:veces, ultima_vez:new Date().toISOString() })
     });
   }catch(e){ console.warn(e); }
 }
@@ -2319,17 +2388,15 @@ async function renderBuzonSupervisor(){
     <h2>📬 Reportes abiertos (${abiertos.length})</h2>
     ${criticos.length>0?`<div style="background:#fde8e8;border-left:4px solid #a13636;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13.5px;color:#a13636;"><b>🔴 ${criticos.length} reporte(s) CRÍTICO(S)</b> requieren tu atención inmediata.</div>`:''}
     ${abiertos.length===0 ? '<div class="empty">No hay reportes pendientes. ✓</div>' :
-      abiertos
-        .sort((a,b)=>{
+      agruparReportesPorUbt(abiertos.sort((a,b)=>{
           const orden={critica:0,alta:1,normal:2};
           return (orden[a.urgencia]??3)-(orden[b.urgencia]??3) || new Date(b.creado_en)-new Date(a.creado_en);
-        })
-        .map(r=>tarjetaReporte(r,true)).join('')}
+        }), true)}
   </div>
   <div class="card">
     <h2>✓ Reportes atendidos (${cerrados.length})</h2>
     ${cerrados.length===0 ? '<div class="empty">Todavía no hay reportes cerrados.</div>' :
-      cerrados.slice(0,15).map(r=>tarjetaReporte(r,false)).join('')}
+      agruparReportesPorUbt(cerrados.slice(0,30), false)}
   </div>`;
 }
 
@@ -2585,6 +2652,9 @@ function renderReportarFalla(){
   const ubts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
   return `
   <div class="card">
+    <button class="btn ghost small" onclick="abrirVista('reportar')">← Volver${STATE.borradorRegistro?' al registro (se conserva lo escrito)':''}</button>
+  </div>
+  <div class="card">
     <h2>📢 Reportar al Supervisor</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Usa esto para avisar de una máquina dañada, una refacción agotada o cualquier anomalía. Le llega notificación al Supervisor de Mantenimiento.</p>
     <div class="field"><label>Tipo de reporte</label>
@@ -2631,7 +2701,33 @@ async function cargarMisReportes(){
   const todos = await listReportes();
   const mios = todos.filter(r=>r.tecnico === STATE.nombre);
   cont.innerHTML = mios.length===0 ? '<div class="empty">No has enviado reportes todavía.</div>' :
-    mios.map(r=>tarjetaReporte(r, false)).join('');
+    agruparReportesPorUbt(mios, false);
+}
+
+function agruparReportesPorUbt(reportes, esSupervisor){
+  const porPlanta = {};
+  reportes.forEach(r=>{
+    porPlanta[r.planta] ??= {};
+    (porPlanta[r.planta][r.ubt_no] ??= []).push(r);
+  });
+  return Object.keys(porPlanta).sort().map(pl=>{
+    const ubts = porPlanta[pl];
+    const totalPl = Object.values(ubts).reduce((a,v)=>a+v.length,0);
+    return `<details open style="margin-bottom:10px;">
+      <summary style="cursor:pointer;padding:9px 12px;background:#2f3742;color:#fff;border-radius:8px;font-weight:700;font-size:13px;">🏭 ${escapeHtml(pl)} (${totalPl})</summary>
+      <div style="padding:10px 0 0 12px;">
+        ${Object.keys(ubts).sort().map(ub=>{
+          const abiertos = ubts[ub].filter(r=>r.estado!=='cerrado').length;
+          return `<details open style="margin-bottom:8px;">
+            <summary style="cursor:pointer;padding:7px 10px;background:#eef1f4;border-radius:7px;font-weight:600;font-size:12.5px;">
+              📍 UBT ${escapeHtml(ub)} (${ubts[ub].length})${abiertos?` · <span style="color:#c77700;">${abiertos} abierto(s)</span>`:''}
+            </summary>
+            <div style="padding-top:8px;">${ubts[ub].map(r=>tarjetaReporte(r,esSupervisor)).join('')}</div>
+          </details>`;
+        }).join('')}
+      </div>
+    </details>`;
+  }).join('');
 }
 
 const ICONO_TIPO = { falla:'🔧', refaccion:'📦', anomalia:'⚠️', otro:'📝' };
