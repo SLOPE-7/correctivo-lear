@@ -157,6 +157,8 @@
   .firma-ok{color:var(--green);font-weight:700;}
   .firma-btn, .edit-btn{background:var(--accent2);color:#fff;border:none;padding:4px 8px;border-radius:4px;font-size:9px;cursor:pointer;font-weight:700;}
   .edit-btn{background:#555;margin-top:2px;}
+  .pie-marca{text-align:center;font-size:10.5px;color:#9aa1a9;opacity:.65;padding:14px 10px 20px;letter-spacing:.3px;user-select:none;}
+  .pie-marca b{font-weight:700;color:#8a9099;}
   .no-print{}
   @media print{
     .no-print{display:none !important;}
@@ -166,6 +168,7 @@
 </head>
 <body>
 <div id="app"></div>
+<div class="pie-marca no-print">Creado por <b>KAL7</b>, Claude · <span id="pie_version"></span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -180,6 +183,13 @@ const checklistGroups = [
 ];
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MAX_FILAS_POR_HOJA = 7;
+
+/* ---------- Versión de la aplicación ----------
+   Sube el número en cada mejora:
+   1.0.0 = versión base
+   1.1.0 = UBT/máquina fijas para operador, pantalla principal de mosaicos, estado del foco
+   1.2.0 = tiempo muerto por planta del técnico (colapsado), botón volver a inicio, marca de agua  */
+const APP_VERSION = '1.2.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -279,6 +289,10 @@ function minutosParaFinJornada(usuario){
 
 const DEFAULT_CODES = { tecnico:"Mantto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", produccion:"Ensamble", admin:"8102vgreal" };
 
+function pintarVersion(){
+  const el = document.getElementById('pie_version');
+  if(el) el.textContent = 'v' + APP_VERSION;
+}
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
 function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -518,11 +532,11 @@ async function render(){
       return;
     }
     if(STATE.vista === 'analisis'){
-      app.innerHTML = renderTopbar() + `<div class="wrap"><div class="card"><button class="btn ghost small" onclick="abrirVista('analisis')">← Volver al panel</button></div>${await renderAnalisis()}</div>`;
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderAnalisis()}</div>`;
       setTimeout(()=>{ calcularTiempoMuerto(); calcularFallasFrecuentes(); cargarRefaccionesAnalisis(); }, 60);
       return;
     }
-    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderAdmin()}</div>`;
     setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); cargarCatalogoPartes(); actualizarUbtsFocoTest(); cargarFocosAdmin(); }, 50);
     return;
   }
@@ -558,6 +572,7 @@ async function render(){
 
   /* Pantalla principal de mosaicos */
   if(STATE.vista === 'menu'){
+    STATE.viendoTodo = false; STATE.editandoUbts = false;
     const necesitaPlanta = ['tecnico','auditor','apqp','produccion'].includes(STATE.rol);
     const listoProd = STATE.rol!=='produccion' || ((STATE.usuario?.ubtsPorPlanta||{})[STATE.plantaHoy]||[]).length>0;
     if((!necesitaPlanta || STATE.plantaHoy) && listoProd){
@@ -568,13 +583,13 @@ async function render(){
   }
 
   if(STATE.viendoTodo){
-    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVerCorrectivos()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderVerCorrectivos()}</div>`;
     setTimeout(()=>{ limpiarAutorelleno(['vt_filtro_ubt'], [ubtEsperado()]); filtrarVerTodo(); }, 60);
     return;
   }
 
   if(STATE.vista === 'analisis' && ['tecnico','supervisor','admin'].includes(STATE.rol)){
-    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAnalisis()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderAnalisis()}</div>`;
     setTimeout(()=>{ calcularTiempoMuerto(); calcularFallasFrecuentes(); cargarRefaccionesAnalisis(); }, 50);
     return;
   }
@@ -587,7 +602,7 @@ async function render(){
       </div></div>`;
       return;
     }
-    app.innerHTML = renderTopbar() + `<div class="wrap">${renderReportarFalla()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderReportarFalla()}</div>`;
     setTimeout(()=>{ cargarMisReportes(); cargarListaPartesRp(); }, 50);
     return;
   }
@@ -597,7 +612,7 @@ async function render(){
     return;
   }
   if(STATE.vista === 'tpm_suplencia' && STATE.rol==='produccion'){
-    app.innerHTML = renderTopbar() + `<div class="wrap">${renderTpmSuplencia()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderTpmSuplencia()}</div>`;
     return;
   }
   if(STATE.vista === 'solicitudes' && STATE.rol==='tecnico'){
@@ -605,12 +620,12 @@ async function render(){
     return;
   }
   if(STATE.vista === 'firma' && STATE.usuario){
-    app.innerHTML = renderTopbar() + `<div class="wrap">${renderRegistroFirma()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderRegistroFirma()}</div>`;
     setTimeout(iniciarCanvasFirma, 60);
     return;
   }
   if(STATE.vista === 'buzon' && STATE.rol==='supervisor'){
-    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderBuzonSupervisor()}</div>`;
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderBuzonSupervisor()}</div>`;
     return;
   }
 
@@ -649,7 +664,7 @@ async function render(){
   }catch(err){
     body = `<div class="card"><h2>⚠️ Error</h2><p style="font-size:13px;color:var(--muted);">${escapeHtml(err.message||String(err))}</p></div>`;
   }
-  app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap"><div id="banner_jornada" class="no-print" style="display:none;border-radius:10px;padding:14px;margin-bottom:14px;"></div>${avisoEntradaAnticipada()}${body}</div>`;
+  app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap"><div id="banner_jornada" class="no-print" style="display:none;border-radius:10px;padding:14px;margin-bottom:14px;"></div>${avisoEntradaAnticipada()}${barraInicio()}${body}</div>`;
   setTimeout(iniciarVigilanciaJornada, 100);
   setTimeout(iniciarRecordatorios, 200);
   if(STATE.rol==='produccion') setTimeout(cargarZonaTpm, 120);
@@ -688,9 +703,13 @@ function renderTopbar(){
     </div>
   </div>`;
 }
-function editarUbts(){ STATE.editandoUbts = true; render(); }
+function editarUbts(){ STATE.editandoUbts = true; STATE.vista = null; render(); }
 function cambiarPlanta(){ STATE.plantaHoy = null; STATE.ubtElegida = null; sheetActivaKey = null; render(); }
-function verCorrectivos(){ STATE.viendoTodo = true; render(); }
+function verCorrectivos(){ STATE.viendoTodo = true; STATE.vista = null; render(); }
+/* Barra fija para regresar a la pantalla principal desde cualquier vista */
+function barraInicio(){
+  return `<div class="card no-print" style="padding:10px 12px;margin-bottom:12px;"><button class="btn ghost small" onclick="irInicio()">🏠 Pantalla principal</button></div>`;
+}
 function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
 function guardarBorradorRegistro(){
   const ids = ['f_fecha','f_hi','f_hf','f_gafete','f_sintomas','f_acciones','f_material','f_parte','f_parte_desc','f_turno'];
@@ -985,6 +1004,7 @@ async function entrarGuardado(){
     try{ await saveUsuario(STATE.usuario); }catch(e){}
   }
   await activarNotificaciones(true);
+  STATE.vista = 'menu';
   render();
 }
 function olvidarUsuario(){
@@ -1041,6 +1061,7 @@ async function confirmarAcceso(){
     localStorage.setItem('correctivo_usuario_guardado', JSON.stringify({nombre, rol:STATE.rol, gafete: STATE.usuario.gafete, turno: turnoSel}));
   }
   await activarNotificaciones(true);
+  STATE.vista = 'menu';
   render();
 }
 
@@ -1713,6 +1734,17 @@ async function renderFoco(){
   const soloOperador = esOperadorProd();
   const ubtsDisp = soloOperador ? [STATE.ubtElegida] : misUbtsProd();
   const maqFija = STATE.usuario?.maquina || '';
+
+  if(soloOperador && !maqFija){
+    return `
+    <div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+    <div class="card">
+      <h2>⚙️ Falta configurar tu máquina</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Antes de solicitar mantenimiento debes elegir en qué máquina trabajas. Solo se pide una vez.</p>
+      <div class="field"><select id="prod_maquina">${MAQ_COR.map(m=>`<option>${escapeHtml(m)}</option>`).join('')}</select></div>
+      <button class="btn" onclick="guardarMaquinaOperador()">Guardar y continuar</button>
+    </div>`;
+  }
 
   const bloqueSolicitar = soloOperador ? `
     <div class="row2">
@@ -3314,6 +3346,9 @@ let cacheAnalisis = null;
 
 async function renderAnalisis(){
   cacheAnalisis = await listSheets();
+  /* El técnico solo analiza su propia planta; supervisor y admin ven todas */
+  const soloSuPlanta = STATE.rol === 'tecnico';
+  const plantaFija = soloSuPlanta ? (STATE.plantaHoy || PLANTA_NOMBRES[0]) : '';
   return `
   <div class="card">
     <h2>🔎 Buscador general</h2>
@@ -3324,10 +3359,11 @@ async function renderAnalisis(){
   </div>
   <div class="card">
     <h2>⏱️ Tiempo muerto por máquina</h2>
+    ${soloSuPlanta ? `<p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Se muestra únicamente <b>${escapeHtml(plantaFija)}</b>, desglosado por UBT y por máquina. Toca cada renglón para desplegarlo.</p>` : `<p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Desglose por planta, UBT y máquina. Toca cada renglón para desplegarlo.</p>`}
     <div class="filters">
-      <select id="an_planta" onchange="calcularTiempoMuerto()">
-        <option value="">Todas las plantas</option>
-        ${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}
+      <select id="an_planta" onchange="calcularTiempoMuerto()" ${soloSuPlanta?'disabled style="background:#eef1f4;"':''}>
+        ${soloSuPlanta ? `<option value="${escapeHtml(plantaFija)}">${escapeHtml(plantaFija)}</option>`
+          : `<option value="">Todas las plantas</option>${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}`}
       </select>
       <select id="an_mes" onchange="calcularTiempoMuerto()">
         <option value="">Todos los meses</option>
@@ -3392,7 +3428,10 @@ function ejecutarBusqueda(){
 }
 
 function calcularTiempoMuerto(){
-  const planta = document.getElementById('an_planta').value;
+  const selPl = document.getElementById('an_planta');
+  if(!selPl) return;
+  let planta = selPl.value;
+  if(STATE.rol === 'tecnico') planta = STATE.plantaHoy || planta;
   const mes = document.getElementById('an_mes').value;
   const cont = document.getElementById('an_tiempo');
   let filas = todasLasFilas();
@@ -3428,18 +3467,18 @@ function calcularTiempoMuerto(){
     ${plantasOrd.map(([pl, dPl])=>{
       const ubtsOrd = Object.entries(dPl.ubts).sort((a,b)=>b[1].minutos-a[1].minutos);
       const maxUbt = ubtsOrd[0][1].minutos || 1;
-      return `<details open style="margin-bottom:10px;">
+      return `<details style="margin-bottom:10px;">
         <summary style="cursor:pointer;padding:10px 12px;background:#2f3742;color:#fff;border-radius:8px;font-weight:700;font-size:13.5px;">
-          🏭 ${escapeHtml(pl)} — ${formatoDuracion(dPl.minutos)} (${dPl.minutos} min) · ${dPl.paros} paro/s
+          🏭 ${escapeHtml(pl)} — ${formatoDuracion(dPl.minutos)} (${dPl.minutos} min) · ${dPl.paros} paro/s <span style="opacity:.6;font-weight:400;">▾</span>
         </summary>
         ${barra(dPl.minutos, maxPlanta, '#a13636')}
         <div style="padding:10px 0 0 12px;">
           ${ubtsOrd.map(([ub, dUb])=>{
             const maqOrd = Object.entries(dUb.maquinas).sort((a,b)=>b[1].minutos-a[1].minutos);
             const maxMaq = maqOrd[0][1].minutos || 1;
-            return `<details open style="margin-bottom:8px;">
+            return `<details style="margin-bottom:8px;">
               <summary style="cursor:pointer;padding:7px 10px;background:#eef1f4;border-radius:7px;font-weight:600;font-size:13px;">
-                📍 UBT ${escapeHtml(ub)} — ${formatoDuracion(dUb.minutos)} (${dUb.minutos} min) · ${dUb.paros} paro/s
+                📍 UBT ${escapeHtml(ub)} — ${formatoDuracion(dUb.minutos)} (${dUb.minutos} min) · ${dUb.paros} paro/s <span style="opacity:.5;font-weight:400;">▾</span>
               </summary>
               ${barra(dUb.minutos, maxUbt, '#c77700')}
               <div style="padding:8px 0 0 12px;">
@@ -3462,7 +3501,9 @@ function calcularTiempoMuerto(){
 function calcularFallasFrecuentes(){
   const cont = document.getElementById('an_frecuentes');
   if(!cont) return;
-  const filas = todasLasFilas();
+  let filas = todasLasFilas();
+  /* El técnico solo ve las fallas de su planta */
+  if(STATE.rol === 'tecnico' && STATE.plantaHoy) filas = filas.filter(f=>f.planta===STATE.plantaHoy);
   const porMaquina = {};
   filas.forEach(f=>{
     const clave = `${f.maquina} · UBT ${f.ubtNo}`;
@@ -3878,6 +3919,7 @@ if ('serviceWorker' in navigator) {
       STATE.rolPrefijado = p.rol;
     }
   }
+  pintarVersion();
   render();
 })();
 </script>
