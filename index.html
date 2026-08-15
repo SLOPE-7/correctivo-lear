@@ -332,7 +332,13 @@ function showToast(msg){
 }
 function getParams(){
   const p = new URLSearchParams(window.location.search);
-  return { rol: p.get('rol') || '', nombre: p.get('nombre') || '' };
+  return {
+    rol: p.get('rol') || '',
+    nombre: p.get('nombre') || '',
+    ver: p.get('ver') || '',
+    planta: p.get('planta') || '',
+    ubt: p.get('ubt') || ''
+  };
 }
 
 /* ---------- Render raíz ---------- */
@@ -340,13 +346,29 @@ async function render(){
   const app = document.getElementById('app');
   if(!STATE.codes) STATE.codes = await getConfig();
   if(!STATE.plantasCfg) STATE.plantasCfg = await getPlantasConfig();
-  if(!STATE.rol){ document.body.classList.add('login-bg'); app.innerHTML = renderRolePicker(); return; }
+
+  /* Modo público: ver todos los correctivos de una UBT (acceso por QR) */
+  if(STATE.modoVerUbt){
+    document.body.classList.remove('login-bg');
+    app.innerHTML = await renderVistaUbtPublica();
+    return;
+  }
+
+  if(!STATE.rol){
+    document.body.classList.add('login-bg');
+    app.innerHTML = renderRolePicker();
+    if(STATE.rolPrefijado){
+      const r = STATE.rolPrefijado; STATE.rolPrefijado = null;
+      setTimeout(()=>elegirRol(r), 60);
+    }
+    return;
+  }
   document.body.classList.remove('login-bg');
 
   if(STATE.rol==='admin'){
     if(!STATE.adminOk){ app.innerHTML = renderTopbar() + renderAdminLogin(); return; }
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
-    setTimeout(()=>{ renderQRCodes(); cargarInfoHistorial(); }, 50);
+    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); }, 50);
     return;
   }
 
@@ -896,6 +918,56 @@ async function firmarApqp(sheetKeyStr, filaId){
   showToast('Firmado ✓'); render();
 }
 
+/* ---------- Vista pública de una UBT (acceso por QR, solo lectura) ---------- */
+async function renderVistaUbtPublica(){
+  const { planta, ubt } = STATE.modoVerUbt;
+  const todas = await listSheets();
+  const delUbt = todas.filter(s => s.planta===planta && s.ubtNo===ubt);
+  const porMaquina = {};
+  delUbt.forEach(s => (porMaquina[s.maquina] ??= []).push(s));
+  const totalRegistros = delUbt.reduce((a,s)=>a+((s.filas||[]).length),0);
+
+  return `
+  <div class="topbar no-print">
+    <div class="tb-left">
+      <span class="tb-logo">📋</span>
+      <div>
+        <div class="tb-title">UBT ${escapeHtml(ubt)}</div>
+        <div class="tb-sub">${escapeHtml(planta)} · ${delUbt.length} hoja(s) · ${totalRegistros} registro(s)</div>
+      </div>
+    </div>
+    <div class="tb-actions">
+      <button class="tb-btn" onclick="location.reload()">🔄<span>Actualizar</span></button>
+      <button class="tb-btn" onclick="imprimirUbtPublica()">🖨️<span>Imprimir</span></button>
+      <button class="tb-btn salir" onclick="salirVistaUbt()">🔑<span>Entrar</span></button>
+    </div>
+  </div>
+  <div class="wrap">
+    ${delUbt.length===0 ? '<div class="card"><div class="empty">Todavía no hay correctivos registrados en esta UBT.</div></div>' :
+      Object.keys(porMaquina).sort().map(maq=>`
+        <div class="card">
+          <h2>⚙️ ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porMaquina[maq].length} hoja/s)</span></h2>
+          ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s,{role:'lectura'})}</div>`).join('')}
+        </div>`).join('')}
+  </div>`;
+}
+
+function salirVistaUbt(){
+  STATE.modoVerUbt = null;
+  const url = new URL(window.location.href); url.search=''; window.history.replaceState({}, '', url);
+  render();
+}
+
+async function imprimirUbtPublica(){
+  const { planta, ubt } = STATE.modoVerUbt;
+  const todas = await listSheets();
+  const delUbt = todas.filter(s => s.planta===planta && s.ubtNo===ubt);
+  if(delUbt.length===0){ showToast('⚠️ No hay hojas que imprimir'); return; }
+  colaImpresion = delUbt;
+  imprimirCola();
+  colaImpresion = [];
+}
+
 /* ---------- Ver correctivos (solo lectura) ---------- */
 let sheetsCacheVerTodo = [];
 async function renderVerCorrectivos(){
@@ -1214,11 +1286,32 @@ async function renderAdmin(){
     <p style="font-size:11.5px;color:var(--muted);margin-top:8px;">El borrado no toca usuarios ni configuración, solo las hojas de correctivo. Descarga el respaldo antes por si acaso.</p>
   </div>
   <div class="card">
-    <h2>Códigos QR — automático para todos los registrados</h2>
-    <div class="field"><label>URL publicada de este artifact (pégala aquí una vez que lo publiques)</label><input id="base_url" placeholder="https://claude.ai/public/artifacts/..."></div>
-    <button class="btn secondary" onclick="renderQRCodes()">Generar / actualizar códigos QR</button>
+    <h2>📱 Códigos QR de acceso</h2>
+    <div class="field">
+      <label>URL de la aplicación</label>
+      <input id="base_url" value="${window.location.origin + window.location.pathname}">
+    </div>
+    <button class="btn secondary" onclick="generarQRRoles()">🔑 Generar QR por rol (4)</button>
+    <div id="qr_roles" class="qr-grid" style="margin-top:14px;"></div>
   </div>
-  <div class="card"><div id="qr_output" class="qr-grid"></div></div>`;
+  <div class="card">
+    <h2>📋 QR de consulta por UBT</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Genera un QR que abre directo todos los correctivos de una línea, de todas sus máquinas. Ideal para pegarlo físicamente en la UBT.</p>
+    <div class="row2">
+      <div class="field"><label>Planta</label>
+        <select id="qr_ubt_planta" onchange="actualizarUbtsQR()">${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>UBT</label><select id="qr_ubt_sel"></select></div>
+    </div>
+    <button class="btn secondary" onclick="generarQRUbt()">Generar QR de esta UBT</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="generarQRTodasUbts()">Generar QR de TODAS las UBT de esta planta</button>
+    <div id="qr_ubts" class="qr-grid" style="margin-top:14px;"></div>
+  </div>
+  <div class="card">
+    <h2>👤 QR personales (por usuario registrado)</h2>
+    <button class="btn secondary" onclick="renderQRCodes()">Generar QR personales</button>
+    <div id="qr_output" class="qr-grid" style="margin-top:14px;"></div>
+  </div>`;
 }
 function toggleVerCodigo(inputId, btn){
   const el = document.getElementById(inputId);
@@ -1323,12 +1416,94 @@ async function guardarPlantas(){
   showToast('UBTs actualizados ✓');
   render();
 }
+function cajaQR(contenedor, url, titulo, subtitulo, color){
+  const box = document.createElement('div');
+  box.className = 'qr-box';
+  if(color) box.style.borderTop = '4px solid ' + color;
+  const qrDiv = document.createElement('div');
+  box.appendChild(qrDiv);
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.innerHTML = `${titulo}${subtitulo?`<br><span style="font-weight:400;font-size:10.5px;color:#6b7280;">${subtitulo}</span>`:''}`;
+  box.appendChild(label);
+  const btn = document.createElement('button');
+  btn.className = 'btn ghost small';
+  btn.style.marginTop = '6px';
+  btn.textContent = '🖨️ Imprimir';
+  btn.onclick = () => imprimirQR(qrDiv, titulo, subtitulo);
+  box.appendChild(btn);
+  contenedor.appendChild(box);
+  new QRCode(qrDiv, { text: url, width: 150, height: 150 });
+}
+
+function imprimirQR(qrDiv, titulo, subtitulo){
+  const img = qrDiv.querySelector('img') || qrDiv.querySelector('canvas');
+  let src = '';
+  if(img && img.tagName === 'IMG') src = img.src;
+  else if(img) src = img.toDataURL();
+  const v = window.open('', '_blank', 'width=500,height=650');
+  if(!v){ showToast('⚠️ Permite ventanas emergentes'); return; }
+  v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
+    <style>body{font-family:Arial,sans-serif;text-align:center;padding:30px;}
+    h1{font-size:22px;margin:0 0 4px;} h2{font-size:15px;font-weight:400;color:#555;margin:0 0 20px;}
+    img{width:300px;height:300px;} .pie{margin-top:18px;font-size:13px;color:#555;}
+    @page{margin:15mm;}</style></head><body>
+    <h1>${titulo}</h1><h2>${subtitulo||''}</h2>
+    <img src="${src}">
+    <div class="pie">Escanea con la cámara de tu teléfono</div>
+    </body></html>`);
+  v.document.close(); v.focus();
+  setTimeout(()=>v.print(), 500);
+}
+
+function generarQRRoles(){
+  const base = document.getElementById('base_url').value.trim();
+  const cont = document.getElementById('qr_roles');
+  cont.innerHTML = '';
+  if(!base){ cont.innerHTML = '<div class="empty">Falta la URL de la aplicación.</div>'; return; }
+  const colores = { tecnico:'#e0b400', auditor:'#8a8f98', apqp:'#a13636', supervisor:'#6b7280' };
+  ['tecnico','auditor','apqp','supervisor'].forEach(rol=>{
+    cajaQR(cont, `${base}?rol=${rol}`, `${ROLES[rol].emoji} ${ROLES[rol].label}`, 'Acceso directo al registro', colores[rol]);
+  });
+}
+
+function actualizarUbtsQR(){
+  const planta = document.getElementById('qr_ubt_planta').value;
+  const sel = document.getElementById('qr_ubt_sel');
+  const ubts = ubtsDeLaPlanta(STATE.plantasCfg, planta);
+  sel.innerHTML = ubts.map(u=>`<option>${u}</option>`).join('');
+}
+
+function generarQRUbt(){
+  const base = document.getElementById('base_url').value.trim();
+  const planta = document.getElementById('qr_ubt_planta').value;
+  const ubt = document.getElementById('qr_ubt_sel').value;
+  const cont = document.getElementById('qr_ubts');
+  cont.innerHTML = '';
+  if(!base || !ubt){ cont.innerHTML = '<div class="empty">Falta la URL o el UBT.</div>'; return; }
+  const url = `${base}?ver=ubt&planta=${encodeURIComponent(planta)}&ubt=${encodeURIComponent(ubt)}`;
+  cajaQR(cont, url, `UBT ${ubt}`, planta, '#0f3d5c');
+}
+
+function generarQRTodasUbts(){
+  const base = document.getElementById('base_url').value.trim();
+  const planta = document.getElementById('qr_ubt_planta').value;
+  const cont = document.getElementById('qr_ubts');
+  cont.innerHTML = '';
+  if(!base){ cont.innerHTML = '<div class="empty">Falta la URL.</div>'; return; }
+  const ubts = ubtsDeLaPlanta(STATE.plantasCfg, planta);
+  ubts.forEach(u=>{
+    const url = `${base}?ver=ubt&planta=${encodeURIComponent(planta)}&ubt=${encodeURIComponent(u)}`;
+    cajaQR(cont, url, `UBT ${u}`, planta, '#0f3d5c');
+  });
+}
+
 async function renderQRCodes(){
   const baseInput = document.getElementById('base_url'), output = document.getElementById('qr_output');
   if(!baseInput || !output) return;
   const base = baseInput.value.trim();
   output.innerHTML = '';
-  if(!base){ output.innerHTML = '<div class="empty">Pega arriba la URL publicada del artifact para generar los QR.</div>'; return; }
+  if(!base){ output.innerHTML = '<div class="empty">Falta la URL de la aplicación.</div>'; return; }
   const usuarios = await listUsuarios();
   if(usuarios.length===0){ output.innerHTML = '<div class="empty">Todavía nadie se ha registrado.</div>'; return; }
   usuarios.forEach(u=>{
@@ -1514,7 +1689,15 @@ if ('serviceWorker' in navigator) {
 /* ---------- Init ---------- */
 (function init(){
   const p = getParams();
-  if(p.rol && ROLES[p.rol]){ STATE.rol = p.rol; STATE.nombre = p.nombre || ''; }
+  if(p.ver === 'ubt' && p.planta && p.ubt){
+    STATE.modoVerUbt = { planta: p.planta, ubt: p.ubt };
+  } else if(p.rol && ROLES[p.rol]){
+    if(p.nombre){
+      STATE.rol = p.rol; STATE.nombre = p.nombre;
+    } else {
+      STATE.rolPrefijado = p.rol;
+    }
+  }
   render();
 })();
 </script>
