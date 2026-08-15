@@ -188,8 +188,9 @@ const MAX_FILAS_POR_HOJA = 7;
    Sube el número en cada mejora:
    1.0.0 = versión base
    1.1.0 = UBT/máquina fijas para operador, pantalla principal de mosaicos, estado del foco
-   1.2.0 = tiempo muerto por planta del técnico (colapsado), botón volver a inicio, marca de agua  */
-const APP_VERSION = '1.2.0';
+   1.2.0 = tiempo muerto por planta del técnico (colapsado), botón volver a inicio, marca de agua
+   1.3.0 = registro/historial de solicitudes de mantenimiento con tiempos de respuesta  */
+const APP_VERSION = '1.3.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -619,6 +620,10 @@ async function render(){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderSolicitudesTecnico()}</div>`;
     return;
   }
+  if(STATE.vista === 'historial' && puedeVerHistorialFocos()){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderHistorialFocos()}</div>`;
+    return;
+  }
   if(STATE.vista === 'firma' && STATE.usuario){
     app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderRegistroFirma()}</div>`;
     setTimeout(iniciarCanvasFirma, 60);
@@ -810,6 +815,7 @@ function renderMenuInicio(){
     T('azul','📊','Análisis','Reportes generales',"abrirVista('analisis')");
   }
 
+  if(puedeVerHistorialFocos()) T('azul wide','📑','Registros de solicitudes','Veces, horas y tiempo de reparación',"abrirVista('historial')");
   T('','🔄','Actualizar','Traer datos nuevos','actualizarDatos()');
   if(STATE.usuario) T('','✍️','Mi firma','Guardar o cambiar',"abrirVista('firma')");
   if(STATE.usuario){
@@ -1494,6 +1500,13 @@ async function listSolicitudesRecientes(planta){
     return await sbFetch(q) || [];
   }catch(e){ return []; }
 }
+/* Solicitudes de los ultimos N dias (todas las plantas si planta viene vacia) */
+async function listSolicitudesRango(dias, planta){
+  const desde = new Date(Date.now() - dias*24*60*60*1000).toISOString();
+  let q = `solicitudes?creado_en=gte.${desde}&select=*&order=creado_en.desc`;
+  if(planta) q += `&planta=eq.${encodeURIComponent(planta)}`;
+  try{ return await sbFetch(q) || []; }catch(e){ return []; }
+}
 async function saveSolicitud(sol){
   await sbFetch('solicitudes?on_conflict=id', {
     method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
@@ -1856,6 +1869,23 @@ async function cancelarMiFoco(id){
 function minutosDesde(iso){
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime())/60000));
 }
+function minutosEntreISO(a, b){
+  if(!a || !b) return null;
+  const d = Math.floor((new Date(b).getTime() - new Date(a).getTime())/60000);
+  return d >= 0 ? d : null;
+}
+function horaCorta(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString('es-MX', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+}
+function soloHora(iso){
+  if(!iso) return '—';
+  return new Date(iso).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+}
+function puedeVerHistorialFocos(){
+  return ['tecnico','supervisor','admin','produccion'].includes(STATE.rol);
+}
 
 function tarjetaSolicitud(s, esTecnico){
   const min = minutosDesde(s.creado_en);
@@ -1958,6 +1988,138 @@ async function terminarFoco(id){
 
   showToast('🏁 Solicitud terminada');
   render();
+}
+
+/* ---------- Registro / historial de solicitudes de mantenimiento ---------- */
+function cambiarRangoHist(d){ STATE.histDias = d; render(); }
+
+async function renderHistorialFocos(){
+  const dias = STATE.histDias || 7;
+  const todasLasPlantas = ['supervisor','admin'].includes(STATE.rol);
+  let filas = await listSolicitudesRango(dias, todasLasPlantas ? '' : (STATE.plantaHoy||''));
+
+  /* Alcance segun el rol */
+  let alcance = todasLasPlantas ? 'Todas las plantas' : ('Planta: ' + (STATE.plantaHoy||'—'));
+  if(STATE.rol === 'produccion'){
+    const sub = STATE.usuario?.subrol || 'operador';
+    if(sub === 'operador'){
+      filas = filas.filter(f => f.ubt_no === STATE.ubtElegida);
+      alcance = `UBT ${STATE.ubtElegida||'—'} · ${STATE.plantaHoy||''}`;
+    } else {
+      const ubts = misUbtsProd();
+      if(ubts.length) filas = filas.filter(f => ubts.includes(f.ubt_no));
+      alcance = `Mis UBTs: ${ubts.join(', ')||'—'}`;
+    }
+  }
+
+  const conRespuesta = filas.filter(f=>f.atendido_en);
+  const conCierre = filas.filter(f=>f.terminado_en && f.atendido_en);
+  const promEspera = conRespuesta.length
+    ? Math.round(conRespuesta.reduce((a,f)=>a+(minutosEntreISO(f.creado_en,f.atendido_en)||0),0)/conRespuesta.length) : null;
+  const promRep = conCierre.length
+    ? Math.round(conCierre.reduce((a,f)=>a+(minutosEntreISO(f.atendido_en,f.terminado_en)||0),0)/conCierre.length) : null;
+  const sinRecibir = filas.filter(f=>f.estado==='pendiente').length;
+  const faltaColumna = filas.length>0 && !('terminado_en' in filas[0]);
+
+  /* Veces que se pidió técnico, por máquina */
+  const porMaquina = {};
+  filas.forEach(f=>{
+    const k = `${f.ubt_no} · ${f.maquina}`;
+    porMaquina[k] ??= { veces:0, minutos:0 };
+    porMaquina[k].veces++;
+    const t = minutosEntreISO(f.atendido_en, f.terminado_en);
+    if(t) porMaquina[k].minutos += t;
+  });
+  const maquinasOrd = Object.entries(porMaquina).sort((a,b)=>b[1].veces-a[1].veces);
+
+  const btnRango = (d,txt)=>`<button class="btn ${dias===d?'':'ghost'} small" style="${dias===d?'background:var(--accent2);':''}" onclick="cambiarRangoHist(${d})">${txt}</button>`;
+
+  return `
+  <div class="card">
+    <h2>📑 Registros de solicitudes de mantenimiento</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">${escapeHtml(alcance)} · últimos ${dias} día(s)</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      ${btnRango(1,'Hoy')} ${btnRango(7,'7 días')} ${btnRango(30,'30 días')} ${btnRango(90,'90 días')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+      <div style="background:#f3f6f9;border-radius:9px;padding:11px;">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;">SE PIDIÓ TÉCNICO</div>
+        <div style="font-size:20px;font-weight:800;">${filas.length} <span style="font-size:12px;font-weight:600;color:var(--muted);">vez/veces</span></div>
+      </div>
+      <div style="background:#fff7e6;border-radius:9px;padding:11px;">
+        <div style="font-size:11px;color:#a16d07;font-weight:700;">ESPERA PROMEDIO</div>
+        <div style="font-size:20px;font-weight:800;">${promEspera===null?'—':formatoDuracion(promEspera)}</div>
+        <div style="font-size:10.5px;color:var(--muted);">de solicitar a que llegue</div>
+      </div>
+      <div style="background:#f0f7f2;border-radius:9px;padding:11px;">
+        <div style="font-size:11px;color:#1a7a3c;font-weight:700;">REPARACIÓN PROMEDIO</div>
+        <div style="font-size:20px;font-weight:800;">${promRep===null?'—':formatoDuracion(promRep)}</div>
+        <div style="font-size:10.5px;color:var(--muted);">de aceptar a terminar</div>
+      </div>
+      <div style="background:#fdecec;border-radius:9px;padding:11px;">
+        <div style="font-size:11px;color:#a13636;font-weight:700;">SIN RECIBIR</div>
+        <div style="font-size:20px;font-weight:800;">${sinRecibir}</div>
+      </div>
+    </div>
+    ${faltaColumna?`<div style="margin-top:12px;background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px;font-size:12px;">⚠️ La hora final no se está guardando. Falta agregar las columnas <b>terminado_por</b> y <b>terminado_en</b> en la base de datos.</div>`:''}
+    ${['tecnico','supervisor','admin'].includes(STATE.rol)?`<button class="btn secondary" style="margin-top:12px;" onclick="exportarHistorialFocos()">📊 Exportar a CSV</button>`:''}
+  </div>
+
+  <div class="card">
+    <h2>🔁 Veces que se pidió técnico por máquina</h2>
+    ${maquinasOrd.length===0 ? '<div class="empty">Sin datos en este periodo.</div>' :
+      `<table class="admin-tbl">
+        <tr><th>UBT · Máquina</th><th style="width:70px;text-align:center;">Veces</th><th style="width:90px;text-align:right;">Tiempo total</th></tr>
+        ${maquinasOrd.map(([k,v])=>`<tr><td>${escapeHtml(k)}</td><td style="text-align:center;font-weight:700;">${v.veces}</td><td style="text-align:right;">${v.minutos?formatoDuracion(v.minutos):'—'}</td></tr>`).join('')}
+      </table>`}
+  </div>
+
+  <div class="card">
+    <h2>🕒 Detalle de cada solicitud (${filas.length})</h2>
+    ${filas.length===0 ? '<div class="empty">No hubo solicitudes en este periodo.</div>' :
+      filas.map(f=>{
+        const espera = minutosEntreISO(f.creado_en, f.atendido_en);
+        const rep = minutosEntreISO(f.atendido_en, f.terminado_en);
+        const total = minutosEntreISO(f.creado_en, f.terminado_en);
+        const term = f.estado==='terminada';
+        const color = term ? '#0f3d5c' : (f.estado==='atendida' ? '#1a7a3c' : '#e0b400');
+        const celda = (t,v,sub)=>`<div style="flex:1;min-width:92px;">
+            <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;">${t}</div>
+            <div style="font-size:14px;font-weight:800;">${v}</div>
+            ${sub?`<div style="font-size:10.5px;color:var(--muted);">${sub}</div>`:''}
+          </div>`;
+        return `<div style="border:1px solid #e2e5e8;border-left:5px solid ${color};border-radius:10px;padding:12px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+            <b style="font-size:13.5px;">UBT ${escapeHtml(f.ubt_no)} · ${escapeHtml(f.maquina)}</b>
+            <span style="font-size:11.5px;color:var(--muted);">${horaCorta(f.creado_en)} · ${escapeHtml(f.planta)} · Turno ${escapeHtml(f.turno||'')}</span>
+          </div>
+          <div style="font-size:11.5px;color:var(--muted);margin:3px 0 9px;">
+            Solicitó: <b>${escapeHtml(f.solicitante)}</b>${f.atendido_por?` · Atendió: <b>${escapeHtml(f.atendido_por)}</b>`:''}
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;border-top:1px dashed #e2e5e8;padding-top:9px;">
+            ${celda('Se solicitó', soloHora(f.creado_en), '')}
+            ${celda('Aceptó', soloHora(f.atendido_en), espera!==null?('esperó '+formatoDuracion(espera)):'sin recibir')}
+            ${celda('Hora final', soloHora(f.terminado_en), term?'':'sin terminar')}
+            ${celda('Duró', rep!==null?formatoDuracion(rep):'—', total!==null?('total '+formatoDuracion(total)):'')}
+          </div>
+          ${f.nota?`<div style="font-size:12.5px;margin-top:8px;background:#f7f9fa;border-radius:7px;padding:8px;">${escapeHtml(f.nota)}</div>`:''}
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+async function exportarHistorialFocos(){
+  const dias = STATE.histDias || 7;
+  const todasLasPlantas = ['supervisor','admin'].includes(STATE.rol);
+  const filas = await listSolicitudesRango(dias, todasLasPlantas ? '' : (STATE.plantaHoy||''));
+  const out = [['Fecha','Planta','UBT','Maquina','Solicito','Turno','Hora solicitud','Hora acepto','Hora final','Espera (min)','Reparacion (min)','Total (min)','Atendio','Estado','Nota']];
+  filas.forEach(f=>out.push([
+    new Date(f.creado_en).toLocaleDateString('es-MX'), f.planta||'', f.ubt_no||'', f.maquina||'',
+    f.solicitante||'', f.turno||'', soloHora(f.creado_en), soloHora(f.atendido_en), soloHora(f.terminado_en),
+    minutosEntreISO(f.creado_en,f.atendido_en) ?? '', minutosEntreISO(f.atendido_en,f.terminado_en) ?? '',
+    minutosEntreISO(f.creado_en,f.terminado_en) ?? '', f.atendido_por||'', f.estado||'', (f.nota||'').replace(/\n/g,' ')
+  ]));
+  descargarCSV('solicitudes-mantenimiento-'+todayISO()+'.csv', out);
 }
 
 /* ---------- Recordatorios automáticos ---------- */
