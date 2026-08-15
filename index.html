@@ -17,6 +17,12 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--shell);color:var(--ink);}
+  body.login-bg{background:linear-gradient(160deg,#1f2933 0%,#2b2b2b 45%,#4a1f1f 100%);background-attachment:fixed;min-height:100vh;}
+  body.login-bg .card{background:#ffffffef;backdrop-filter:blur(6px);}
+  .login-hero{text-align:center;padding:26px 10px 6px;color:#fff;}
+  .login-hero .logo{font-size:44px;}
+  .login-hero h1{margin:8px 0 2px;font-size:20px;font-weight:800;letter-spacing:.5px;}
+  .login-hero p{margin:0;font-size:12.5px;opacity:.7;}
   .topbar{background:linear-gradient(135deg,#2b2b2b,#3a3f45);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:10;box-shadow:0 2px 8px #0003;}
   .tb-left{display:flex;align-items:center;gap:10px;}
   .tb-logo{font-size:22px;background:var(--accent);width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;}
@@ -84,6 +90,8 @@
   .badge-est{display:inline-block;padding:3px 8px;border-radius:20px;font-size:10.5px;font-weight:700;white-space:nowrap;}
   .badge-est.act{background:#e3f6e8;color:#1a7a3c;}
   .badge-est.bloq{background:#fde8e8;color:#a13636;}
+  .cola-bar{position:sticky;top:64px;z-index:9;background:#0f3d5c;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;box-shadow:0 2px 8px #0003;}
+  .cola-bar .btn{width:auto;}
   .pass-inline{display:flex;gap:6px;margin-top:6px;}
   .pass-inline input{padding:6px 8px;border:1px solid #ccd1d6;border-radius:5px;font-size:12px;flex:1;}
   .pass-inline button{padding:6px 10px;border:none;border-radius:5px;background:var(--accent2);color:#fff;font-size:12px;font-weight:700;cursor:pointer;}
@@ -153,7 +161,7 @@ const ROLES = {
   supervisor:{label:"Supervisor de Mantenimiento", emoji:"👁️"},
   admin:     {label:"Administrador", emoji:"⚙️"},
 };
-const DEFAULT_CODES = { tecnico:"Matto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", admin:"8102vgreal" };
+const DEFAULT_CODES = { tecnico:"Mantto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", admin:"8102vgreal" };
 
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
 function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -321,12 +329,13 @@ async function render(){
   const app = document.getElementById('app');
   if(!STATE.codes) STATE.codes = await getConfig();
   if(!STATE.plantasCfg) STATE.plantasCfg = await getPlantasConfig();
-  if(!STATE.rol){ app.innerHTML = renderRolePicker(); return; }
+  if(!STATE.rol){ document.body.classList.add('login-bg'); app.innerHTML = renderRolePicker(); return; }
+  document.body.classList.remove('login-bg');
 
   if(STATE.rol==='admin'){
     if(!STATE.adminOk){ app.innerHTML = renderTopbar() + renderAdminLogin(); return; }
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
-    setTimeout(renderQRCodes, 50);
+    setTimeout(()=>{ renderQRCodes(); cargarInfoHistorial(); }, 50);
     return;
   }
 
@@ -345,8 +354,7 @@ async function render(){
     }
   }
   const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
-  const necesitaGafete = STATE.nombre && !STATE.usuario;
-  if(necesitaGafete){
+  if(STATE.nombre && !STATE.usuario){
     app.innerHTML = renderTopbar() + renderGafeteSetup();
     return;
   }
@@ -380,7 +388,7 @@ async function render(){
   }catch(err){
     body = `<div class="card"><h2>⚠️ Error</h2><p style="font-size:13px;color:var(--muted);">${escapeHtml(err.message||String(err))}</p></div>`;
   }
-  app.innerHTML = renderTopbar() + `<div class="wrap">${body}</div>`;
+  app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap">${body}</div>`;
   if(STATE.rol==='supervisor') setTimeout(filtrarSupervisor, 50);
 }
 
@@ -427,14 +435,103 @@ async function actualizarDatos(){
   showToast('Actualizado ✓');
 }
 function cambiarRol(){
+  const guardado = localStorage.getItem('correctivo_usuario_guardado');
+  const msg = guardado
+    ? '¿Seguro que quieres salir?\n\nTus datos quedan guardados en este dispositivo para entrar más rápido.'
+    : '¿Seguro que quieres salir?\n\nTendrás que escribir tus datos de nuevo.';
+  if(!confirm(msg)) return;
   STATE = { rol:'', nombre:'', usuario:null, codes:STATE.codes, plantasCfg:STATE.plantasCfg, editandoUbts:false, plantaHoy:null, ubtElegida:null };
+  colaImpresion = [];
   const url = new URL(window.location.href); url.search=''; window.history.replaceState({}, '', url);
   render();
 }
 
+/* ---------- Cola de impresión por UBT ---------- */
+let colaImpresion = [];
+
+function enCola(key){ return colaImpresion.some(s=>s.key===key); }
+
+async function toggleCola(key){
+  if(enCola(key)){
+    colaImpresion = colaImpresion.filter(s=>s.key!==key);
+    showToast('Quitado de la cola');
+  } else {
+    const sheet = await getSheet(key);
+    if(sheet){ sheet.key = key; colaImpresion.push(sheet); showToast('➕ Agregado a la cola ('+colaImpresion.length+')'); }
+  }
+  render();
+}
+
+async function agregarUbtACola(planta, ubt){
+  const todas = await listSheets();
+  const delUbt = todas.filter(s=>s.planta===planta && s.ubtNo===ubt);
+  let nuevos = 0;
+  delUbt.forEach(s=>{ if(!enCola(s.key)){ colaImpresion.push(s); nuevos++; } });
+  showToast(nuevos>0 ? `➕ ${nuevos} hoja(s) de UBT ${ubt} agregadas` : 'Ya estaban todas en la cola');
+  render();
+}
+
+function limpiarCola(){ colaImpresion = []; showToast('Cola vaciada'); render(); }
+
+function imprimirCola(){
+  if(colaImpresion.length===0){ showToast('⚠️ La cola está vacía'); return; }
+
+  /* Nombre según el contenido de la cola */
+  const ubts = [...new Set(colaImpresion.map(s=>s.ubtNo))];
+  const maqs = [...new Set(colaImpresion.map(s=>s.maquina))];
+  const p = colaImpresion[0];
+  let titulo;
+  if(ubts.length === 1 && maqs.length === 1){
+    titulo = `Correctivo-${maqs[0]}-${ubts[0]}-${p.mes}-${p.anio}`;
+  } else if(ubts.length === 1){
+    titulo = `Correctivo-${ubts[0]}-${p.mes}-${p.anio}`;
+  } else {
+    titulo = `Correctivo-Varios UBT-${p.mes}-${p.anio}`;
+  }
+
+  const estilos = [...document.querySelectorAll('style')].map(s=>s.outerHTML).join('');
+  const hojas = colaImpresion.map(s=>renderSheetVisual(s,{role:'lectura'})).join('<div style="page-break-after:always;"></div>');
+  const ventana = window.open('', '_blank', 'width=1100,height=800');
+  if(!ventana){ showToast('⚠️ El navegador bloqueó la ventana emergente'); return; }
+  ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>${estilos}
+    <style>body{background:#fff;margin:0;padding:10px;} .no-print{display:none !important;}
+    @page{size:letter landscape;margin:8mm;}
+    table.sheet-table{min-width:0 !important;width:100% !important;}
+    .sheet-page{border:none;page-break-inside:avoid;}</style></head><body>${hojas}</body></html>`);
+  ventana.document.close(); ventana.focus();
+  setTimeout(()=>ventana.print(), 500);
+}
+
+function renderBarraCola(){
+  if(colaImpresion.length===0) return '';
+  return `<div class="cola-bar no-print">
+    <span>🖨️ <b>${colaImpresion.length}</b> hoja(s) en cola</span>
+    <div>
+      <button class="btn small secondary" onclick="imprimirCola()">Imprimir cola</button>
+      <button class="btn small ghost" onclick="limpiarCola()">Vaciar</button>
+    </div>
+  </div>`;
+}
+
 function renderRolePicker(){
+  const guardado = JSON.parse(localStorage.getItem('correctivo_usuario_guardado') || 'null');
   return `
   <div class="wrap">
+    <div class="login-hero">
+      <div class="logo">🔧</div>
+      <h1>Correctivo · Lear</h1>
+      <p>Sistema de validación de mantenimiento</p>
+    </div>
+    ${guardado ? `
+    <div class="card">
+      <h2>👋 Bienvenido de nuevo</h2>
+      <div style="background:#f3f6f9;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-weight:800;font-size:15px;">${ROLES[guardado.rol]?.emoji||''} ${escapeHtml(guardado.nombre)}</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${ROLES[guardado.rol]?.label||guardado.rol}${guardado.gafete?(' · Gafete '+escapeHtml(guardado.gafete)):''}</div>
+      </div>
+      <button class="btn" onclick="entrarGuardado()">Entrar como ${escapeHtml(guardado.nombre)}</button>
+      <button class="btn ghost" style="margin-top:8px;" onclick="olvidarUsuario()">Usar otro usuario</button>
+    </div>` : ''}
     <div class="card">
       <h2>¿Quién eres?</h2>
       <div class="role-grid">
@@ -446,28 +543,61 @@ function renderRolePicker(){
     </div>
     <div class="card" id="nombre_form" style="display:none;">
       <h2 id="nombre_form_title">Acceso</h2>
-      <div class="field"><label>Tu nombre</label><input id="nombre_input" placeholder="Escribe tu nombre"></div>
+      <div class="field"><label>Tu nombre</label><input id="nombre_input" placeholder="Escribe tu nombre" autocapitalize="words"></div>
+      <div class="field" id="gafete_wrap"><label>No. de Gafete</label><input id="gafete_login" placeholder="Tu número de gafete" inputmode="numeric"></div>
       <div class="field"><label>Código de acceso</label><input id="codigo_input" type="password" placeholder="Código de tu rol"></div>
+      <label class="checkline"><input type="checkbox" id="recordar_chk" checked> 💾 Recordar mis datos en este dispositivo</label>
       <div id="codigo_error" style="color:#b00;font-size:12px;margin-bottom:8px;display:none;">Código incorrecto.</div>
       <button class="btn" onclick="confirmarAcceso()">Continuar</button>
     </div>
   </div>`;
 }
+
+function entrarGuardado(){
+  const g = JSON.parse(localStorage.getItem('correctivo_usuario_guardado') || 'null');
+  if(!g) return;
+  STATE.rol = g.rol; STATE.nombre = g.nombre; STATE.usuario = null;
+  render();
+}
+function olvidarUsuario(){
+  localStorage.removeItem('correctivo_usuario_guardado');
+  showToast('Usuario olvidado');
+  render();
+}
+
 let rolSeleccionadoTemp = '';
 function elegirRol(rol){
   if(rol==='admin'){ STATE.rol = rol; STATE.nombre=''; STATE.adminOk=false; render(); return; }
   rolSeleccionadoTemp = rol;
-  document.getElementById('nombre_form_title').textContent = 'Acceso — ' + ROLES[rol].label;
+  document.getElementById('nombre_form_title').textContent = ROLES[rol].emoji + ' Acceso — ' + ROLES[rol].label;
+  document.getElementById('gafete_wrap').style.display = (rol==='supervisor') ? 'none' : 'flex';
   document.getElementById('nombre_form').style.display = 'block';
   document.getElementById('nombre_form').scrollIntoView({behavior:'smooth'});
   document.getElementById('nombre_input').focus();
 }
-function confirmarAcceso(){
+
+async function confirmarAcceso(){
   const nombre = document.getElementById('nombre_input').value.trim();
+  const gafete = document.getElementById('gafete_login').value.trim();
   const codigo = document.getElementById('codigo_input').value;
+  const recordar = document.getElementById('recordar_chk').checked;
+  const esSupervisor = rolSeleccionadoTemp === 'supervisor';
+
   if(!nombre){ document.getElementById('nombre_input').style.borderColor='red'; return; }
+  if(!esSupervisor && !gafete){ document.getElementById('gafete_login').style.borderColor='red'; showToast('⚠️ Escribe tu No. de Gafete'); return; }
   if(codigo !== STATE.codes[rolSeleccionadoTemp]){ document.getElementById('codigo_error').style.display='block'; return; }
+
   STATE.rol = rolSeleccionadoTemp; STATE.nombre = nombre; STATE.usuario = null;
+
+  const existente = await getUsuario(nombre);
+  if(existente && existente.bloqueado){ render(); return; }
+  STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: (existente&&existente.ubtsPorPlanta)||{}, bloqueado:false };
+  try{ await saveUsuario(STATE.usuario); }catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+
+  if(recordar){
+    localStorage.setItem('correctivo_usuario_guardado', JSON.stringify({nombre, rol:STATE.rol, gafete: STATE.usuario.gafete}));
+  }
+  await activarNotificaciones(true);
   render();
 }
 
@@ -476,12 +606,12 @@ function renderGafeteSetup(){
   return `<div class="wrap"><div class="card">
     <h2>Registra tu No. de Gafete</h2>
     <p style="font-size:13px;color:var(--muted);">Solo se pide una vez.</p>
-    <div class="field"><label>No. de Gafete</label><input id="gafete_input"></div>
+    <div class="field" ${STATE.rol==="supervisor"?"style=\"display:none\"":""}><label>No. de Gafete</label><input id="gafete_input" value="${STATE.rol==="supervisor"?"—":""}"></div>
     <button class="btn" onclick="guardarGafete()">Guardar y continuar</button>
   </div></div>`;
 }
 async function guardarGafete(){
-  const gafete = document.getElementById('gafete_input').value.trim();
+  const gafete = STATE.rol==='supervisor' ? '—' : document.getElementById('gafete_input').value.trim();
   if(!gafete){ showToast('⚠️ Escribe tu No. de Gafete'); return; }
   STATE.usuario = { nombre: STATE.nombre, gafete, rol: STATE.rol, ubtsPorPlanta: {} };
   try{
@@ -793,6 +923,7 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
           const totalUbt = Object.values(maquinas).reduce((a,arr)=>a+arr.length,0);
           return `<details style="margin-bottom:6px;">
             <summary style="cursor:pointer;font-weight:600;padding:6px 10px;background:#eef1f4;border-radius:6px;">UBT ${escapeHtml(ubt)} (${totalUbt})</summary>
+            ${puedeImprimir ? `<div style="padding:8px 0 0 14px;"><button class="btn small secondary no-print" onclick="agregarUbtACola('${planta.replace(/'/g,"\\'")}','${ubt.replace(/'/g,"\\'")}')">🖨️ Agregar todo el UBT ${escapeHtml(ubt)} a la cola</button></div>` : ''}
             <div style="padding:8px 0 0 14px;">
               ${Object.keys(maquinas).sort().map(maq=>`
                 <details style="margin-bottom:6px;">
@@ -808,17 +939,23 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
 }
 
 /* ---------- Imprimir una hoja individual ---------- */
-function imprimirHoja(elId){
+function imprimirHoja(elId, sheetKey){
   const target = document.getElementById(elId);
   if(!target){ showToast('⚠️ No se encontró la hoja'); return; }
   const contenido = target.querySelector('.sheet-page');
   if(!contenido){ showToast('⚠️ No se encontró el formato'); return; }
 
-  const estilos = [...document.querySelectorAll('style')].map(s=>s.outerHTML).join('');
+  const s = colaImpresion.find(x=>x.key===sheetKey) || target.__sheet;
+  let titulo = 'Correctivo';
+  if(target.dataset.maquina){
+    titulo = `Correctivo-${target.dataset.maquina}-${target.dataset.ubt}-${target.dataset.mes}-${target.dataset.anio}`;
+  }
+
+  const estilos = [...document.querySelectorAll('style')].map(x=>x.outerHTML).join('');
   const ventana = window.open('', '_blank', 'width=1100,height=800');
   if(!ventana){ showToast('⚠️ El navegador bloqueó la ventana. Permite ventanas emergentes.'); return; }
   ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Correctivo</title>${estilos}
+    <title>${titulo}</title>${estilos}
     <style>
       body{background:#fff;margin:0;padding:10px;}
       .no-print{display:none !important;}
@@ -832,9 +969,15 @@ function imprimirHoja(elId){
 }
 function renderSheetPrintWrap(sheet, opts){
   const wrapId = 'sw_' + sheet.key.replace(/[^a-z0-9]/gi,'');
-  return `<div class="sheet-print-wrap" id="${wrapId}">
+  const yaEsta = enCola(sheet.key);
+  return `<div class="sheet-print-wrap" id="${wrapId}"
+      data-maquina="${escapeHtml(sheet.maquina)}" data-ubt="${escapeHtml(sheet.ubtNo)}"
+      data-mes="${escapeHtml(sheet.mes)}" data-anio="${escapeHtml(sheet.anio)}">
     ${renderSheetVisual(sheet, opts)}
-    <button class="btn ghost small no-print" style="margin-top:6px;" onclick="imprimirHoja('${wrapId}')">🖨️ Imprimir / Guardar como PDF esta hoja</button>
+    <div class="no-print" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ghost small" onclick="imprimirHoja('${wrapId}','${sheet.key}')">🖨️ Imprimir esta hoja</button>
+      <button class="btn ${yaEsta?'ghost':'secondary'} small" onclick="toggleCola('${sheet.key}')">${yaEsta?'✓ En cola (quitar)':'➕ Agregar a cola'}</button>
+    </div>
   </div>`;
 }
 
@@ -1000,6 +1143,14 @@ async function renderAdmin(){
     </table></div>`}
   </div>
   <div class="card">
+    <h2>🗄️ Historial de correctivos</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Útil para limpiar los datos de prueba antes de arrancar en producción.</p>
+    <div id="hist_info" style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;">Cargando...</div>
+    <button class="btn secondary" onclick="descargarRespaldo()">⬇️ Descargar respaldo (JSON)</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="borrarHistorial(this)">🗑️ Borrar TODO el historial de hojas</button>
+    <p style="font-size:11.5px;color:var(--muted);margin-top:8px;">El borrado no toca usuarios ni configuración, solo las hojas de correctivo. Descarga el respaldo antes por si acaso.</p>
+  </div>
+  <div class="card">
     <h2>Códigos QR — automático para todos los registrados</h2>
     <div class="field"><label>URL publicada de este artifact (pégala aquí una vez que lo publiques)</label><input id="base_url" placeholder="https://claude.ai/public/artifacts/..."></div>
     <button class="btn secondary" onclick="renderQRCodes()">Generar / actualizar códigos QR</button>
@@ -1127,6 +1278,61 @@ async function renderQRCodes(){
     new QRCode(qrDiv, { text: url, width: 130, height: 130 });
   });
 }
+
+
+async function cargarInfoHistorial(){
+  const el = document.getElementById('hist_info');
+  if(!el) return;
+  try{
+    const hojas = await listSheets();
+    const totalFilas = hojas.reduce((a,h)=>a+((h.filas||[]).length),0);
+    const plantas = [...new Set(hojas.map(h=>h.planta))];
+    el.innerHTML = `<b>${hojas.length}</b> hoja(s) · <b>${totalFilas}</b> registro(s) · Plantas: ${plantas.join(', ')||'—'}`;
+  }catch(e){ el.textContent = 'No se pudo leer el historial.'; }
+}
+
+async function descargarRespaldo(){
+  showToast('Preparando respaldo...');
+  const hojas = await listSheets();
+  const usuarios = await listUsuarios();
+  const data = { fecha:new Date().toISOString(), hojas, usuarios, plantas:STATE.plantasCfg };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'respaldo-correctivos-' + todayISO() + '.json';
+  a.click();
+  showToast('Respaldo descargado ✓');
+}
+
+async function borrarHistorial(btn){
+  if(btn.dataset.confirm !== '1'){
+    btn.dataset.confirm = '1';
+    btn.textContent = '⚠️ Toca de nuevo para BORRAR TODO';
+    setTimeout(()=>{ btn.dataset.confirm=''; btn.textContent='🗑️ Borrar TODO el historial de hojas'; }, 5000);
+    return;
+  }
+  btn.textContent = 'Borrando...';
+  try{
+    await sbFetch('hojas?clave=neq.__ninguna__', { method:'DELETE', prefer:'return=minimal' });
+    showToast('Historial borrado ✓');
+  }catch(err){ showToast('⚠️ '+(err.message||err)); }
+  btn.dataset.confirm='';
+  render();
+}
+
+/* Primera letra en mayúscula automáticamente */
+document.addEventListener('input', e => {
+  const t = e.target;
+  if(!(t instanceof HTMLInputElement) && !(t instanceof HTMLTextAreaElement)) return;
+  if(t.type === 'password' || t.type === 'number' || t.type === 'date' || t.type === 'time') return;
+  if(t.dataset.noCap === '1') return;
+  const v = t.value;
+  if(v.length > 0 && v[0] !== v[0].toUpperCase()){
+    const pos = t.selectionStart;
+    t.value = v[0].toUpperCase() + v.slice(1);
+    try{ t.setSelectionRange(pos, pos); }catch(e){}
+  }
+});
 
 /* ---------- Notificaciones Push ---------- */
 const VAPID_PUBLIC_KEY = 'BHO00CHONm3Uf0MIaOVAI9SxsAyMd_0hctC7TqKTl5Vpn4Jh1IHBZbHX4PM1fAV2uPr9ZdsmsIW_MaeDBkxmsSg';
