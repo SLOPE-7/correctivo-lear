@@ -161,6 +161,62 @@ const ROLES = {
   supervisor:{label:"Supervisor de Mantenimiento", emoji:"👁️"},
   admin:     {label:"Administrador", emoji:"⚙️"},
 };
+const DEFAULT_TURNOS = {
+  TA: { nombre:'Turno A', inicio:'06:00', fin:'14:50',
+        extras:[ {etiqueta:'14:50 a 17:00', inicio:'14:50', fin:'17:00'},
+                 {etiqueta:'14:50 a 18:00', inicio:'14:50', fin:'18:00'} ] },
+  TB: { nombre:'Turno B', inicio:'14:50', fin:'23:15',
+        extras:[ {etiqueta:'11:15 a 23:15 (entrada anticipada)', inicio:'11:15', fin:'23:15'},
+                 {etiqueta:'16:00 a 23:15', inicio:'16:00', fin:'23:15'},
+                 {etiqueta:'18:00 a 06:00', inicio:'18:00', fin:'06:00'} ] },
+  TC: { nombre:'Turno C', inicio:'23:15', fin:'06:00',
+        extras:[ {etiqueta:'18:00 a 06:00', inicio:'18:00', fin:'06:00'} ] }
+};
+
+function minDelDia(hhmm){ const [h,m]=(hhmm||'00:00').split(':').map(Number); return h*60+m; }
+function ahoraMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes(); }
+
+/* ¿La hora está dentro del rango? Soporta rangos que cruzan medianoche */
+function dentroDeRango(minAhora, inicio, fin){
+  const i = minDelDia(inicio), f = minDelDia(fin);
+  return (i <= f) ? (minAhora >= i && minAhora < f) : (minAhora >= i || minAhora < f);
+}
+
+/* Detecta el turno según una hora dada */
+function turnoDeHora(hhmm){
+  const m = minDelDia(hhmm);
+  const T = STATE.turnosCfg || DEFAULT_TURNOS;
+  for(const [k,t] of Object.entries(T)){
+    if(dentroDeRango(m, t.inicio, t.fin)) return k;
+  }
+  return 'TA';
+}
+
+/* ¿El usuario está dentro de su jornada ahora mismo? */
+function enJornada(usuario){
+  if(!usuario || !usuario.turno) return true;
+  const T = STATE.turnosCfg || DEFAULT_TURNOS;
+  const t = T[usuario.turno];
+  if(!t) return true;
+  const m = ahoraMin();
+  if(dentroDeRango(m, t.inicio, t.fin)) return true;
+  /* Jornada extendida vigente */
+  if(usuario.extraInicio && usuario.extraFin && dentroDeRango(m, usuario.extraInicio, usuario.extraFin)) return true;
+  return false;
+}
+
+/* Minutos que faltan para que termine la jornada */
+function minutosParaFinJornada(usuario){
+  const T = STATE.turnosCfg || DEFAULT_TURNOS;
+  const t = T[usuario?.turno];
+  if(!t) return null;
+  let fin = minDelDia(t.fin);
+  if(usuario.extraFin && dentroDeRango(ahoraMin(), usuario.extraInicio||t.inicio, usuario.extraFin)) fin = minDelDia(usuario.extraFin);
+  let dif = fin - ahoraMin();
+  if(dif < -720) dif += 1440;
+  return dif;
+}
+
 const DEFAULT_CODES = { tecnico:"Mantto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", admin:"8102vgreal" };
 
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
@@ -204,6 +260,18 @@ async function saveConfig(cfg){
     method: 'POST',
     prefer: 'resolution=merge-duplicates,return=minimal',
     body: JSON.stringify({ clave:'accesscodes', valor: cfg, actualizado_en: new Date().toISOString() })
+  });
+}
+async function getTurnosConfig(){
+  try{
+    const r = await sbFetch('config?clave=eq.turnos&select=valor');
+    return (r && r[0]) ? r[0].valor : JSON.parse(JSON.stringify(DEFAULT_TURNOS));
+  }catch(e){ return JSON.parse(JSON.stringify(DEFAULT_TURNOS)); }
+}
+async function saveTurnosConfig(cfg){
+  await sbFetch('config?on_conflict=clave', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave:'turnos', valor: cfg, actualizado_en:new Date().toISOString() })
   });
 }
 async function getPlantasConfig(){
@@ -263,11 +331,11 @@ function todasLasUbts(plantasCfg){
 function desempacarExtra(extra){
   const e = extra || {};
   if(Object.prototype.hasOwnProperty.call(e, '__ubts')){
-    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre' };
+    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre', turno: e.__turno || '', extraInicio: e.__extraInicio || '', extraFin: e.__extraFin || '' };
   }
   const limpio = { ...e };
-  delete limpio.__bloqueado; delete limpio.__firma; delete limpio.__modoFirma;
-  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre' };
+  delete limpio.__bloqueado; delete limpio.__firma; delete limpio.__modoFirma; delete limpio.__turno; delete limpio.__extraInicio; delete limpio.__extraFin;
+  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre', turno: e.__turno || '', extraInicio: e.__extraInicio || '', extraFin: e.__extraFin || '' };
 }
 
 async function getUsuario(nombre){
@@ -284,7 +352,7 @@ async function saveUsuario(u){
     prefer: 'resolution=merge-duplicates,return=minimal',
     body: JSON.stringify({
       nombre_slug: slug(u.nombre), nombre: u.nombre, rol: u.rol,
-      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado, __firma: u.firma || '', __modoFirma: u.modoFirma || 'nombre' }
+      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado, __firma: u.firma || '', __modoFirma: u.modoFirma || 'nombre', __turno: u.turno || '', __extraInicio: u.extraInicio || '', __extraFin: u.extraFin || '' }
     })
   });
 }
@@ -346,6 +414,7 @@ async function render(){
   const app = document.getElementById('app');
   if(!STATE.codes) STATE.codes = await getConfig();
   if(!STATE.plantasCfg) STATE.plantasCfg = await getPlantasConfig();
+  if(!STATE.turnosCfg) STATE.turnosCfg = await getTurnosConfig();
 
   /* Modo público: ver todos los correctivos de una UBT (acceso por QR) */
   if(STATE.modoVerUbt){
@@ -449,7 +518,8 @@ async function render(){
   }catch(err){
     body = `<div class="card"><h2>⚠️ Error</h2><p style="font-size:13px;color:var(--muted);">${escapeHtml(err.message||String(err))}</p></div>`;
   }
-  app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap">${body}</div>`;
+  app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap"><div id="banner_jornada" class="no-print" style="display:none;border-radius:10px;padding:14px;margin-bottom:14px;"></div>${avisoEntradaAnticipada()}${body}</div>`;
+  setTimeout(iniciarVigilanciaJornada, 100);
   if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
   if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(cargarListaPartes, 50);
 }
@@ -464,7 +534,7 @@ function renderTopbar(){
       <span class="tb-logo">🔧</span>
       <div>
         <div class="tb-title">Correctivo · Lear</div>
-        <div class="tb-sub">${ROLES[STATE.rol]?.emoji||''} ${ROLES[STATE.rol]?.label||STATE.rol}${STATE.nombre?(' · '+STATE.nombre):''}${STATE.usuario?.gafete?(' · '+STATE.usuario.gafete):''}${STATE.plantaHoy?(' · '+STATE.plantaHoy):''}</div>
+        <div class="tb-sub">${ROLES[STATE.rol]?.emoji||''} ${ROLES[STATE.rol]?.label||STATE.rol}${STATE.nombre?(' · '+STATE.nombre):''}${STATE.usuario?.gafete?(' · '+STATE.usuario.gafete):''}${STATE.plantaHoy?(' · '+STATE.plantaHoy):''}${STATE.usuario?.turno?(' · '+STATE.usuario.turno+(STATE.usuario.extraFin?' +extra':'')):''}</div>
       </div>
     </div>
     <div class="tb-actions">
@@ -613,6 +683,13 @@ function renderRolePicker(){
       <h2 id="nombre_form_title">Acceso</h2>
       <div class="field"><label>Tu nombre</label><input id="nombre_input" placeholder="Escribe tu nombre" autocapitalize="words"></div>
       <div class="field" id="gafete_wrap"><label>No. de Gafete</label><input id="gafete_login" placeholder="Tu número de gafete" inputmode="numeric"></div>
+      <div class="field" id="turno_wrap"><label>Tu turno</label>
+        <select id="turno_login">
+          <option value="TA">🌅 Turno A — 06:00 a 14:50</option>
+          <option value="TB">🌇 Turno B — 14:50 a 23:15</option>
+          <option value="TC">🌙 Turno C — 23:15 a 06:00</option>
+        </select>
+      </div>
       <div class="field"><label>Código de acceso</label><input id="codigo_input" type="password" placeholder="Código de tu rol"></div>
       <label class="checkline"><input type="checkbox" id="recordar_chk" checked> 💾 Recordar mis datos en este dispositivo</label>
       <div id="codigo_error" style="color:#b00;font-size:12px;margin-bottom:8px;display:none;">Código incorrecto.</div>
@@ -654,6 +731,7 @@ function elegirRol(rol){
 async function confirmarAcceso(){
   const nombre = document.getElementById('nombre_input').value.trim();
   const gafete = document.getElementById('gafete_login').value.trim();
+  const turnoSel = document.getElementById('turno_login').value;
   const codigo = document.getElementById('codigo_input').value;
   const recordar = document.getElementById('recordar_chk').checked;
   const esSupervisor = rolSeleccionadoTemp === 'supervisor';
@@ -672,15 +750,16 @@ async function confirmarAcceso(){
     STATE.usuario = {
       ...existente,
       rol: STATE.rol,
-      gafete: esSupervisor ? '—' : (gafete || existente.gafete)
+      gafete: esSupervisor ? '—' : (gafete || existente.gafete),
+      turno: turnoSel, extraInicio:'', extraFin:''
     };
   } else {
-    STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: {}, bloqueado:false };
+    STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: {}, bloqueado:false, turno: turnoSel, extraInicio:'', extraFin:'' };
   }
   try{ await saveUsuario(STATE.usuario); }catch(err){ showToast('⚠️ '+(err.message||err)); return; }
 
   if(recordar){
-    localStorage.setItem('correctivo_usuario_guardado', JSON.stringify({nombre, rol:STATE.rol, gafete: STATE.usuario.gafete}));
+    localStorage.setItem('correctivo_usuario_guardado', JSON.stringify({nombre, rol:STATE.rol, gafete: STATE.usuario.gafete, turno: turnoSel}));
   }
   await activarNotificaciones(true);
   render();
@@ -792,6 +871,18 @@ async function renderTecnico(){
         <div class="field"><label>Hora Final</label><input id="f_hf" type="time" onchange="validarTiempos()"></div>
       </div>
       <div id="aviso_tiempo" style="display:none;font-size:12.5px;padding:8px 10px;border-radius:8px;margin-bottom:10px;"></div>
+      <div class="row2">
+        <div class="field"><label>Turno</label>
+          <select id="f_turno">
+            <option value="TA">Turno A (06:00-14:50)</option>
+            <option value="TB">Turno B (14:50-23:15)</option>
+            <option value="TC">Turno C (23:15-06:00)</option>
+          </select>
+        </div>
+        <div class="field" style="justify-content:flex-end;">
+          <label class="checkline" style="margin-bottom:0;"><input type="checkbox" id="f_extra"> ⏱️ Fue en tiempo extra</label>
+        </div>
+      </div>
       <div class="field"><label>No. Gafete</label><input id="f_gafete" value="${STATE.usuario?.gafete||''}"></div>
       <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas" oninput="buscarFallasSimilares()"></textarea></div>
       <div id="fallas_similares" style="display:none;background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;"></div>
@@ -869,6 +960,8 @@ async function agregarFila(){
     horaInicio: hi,
     horaFinal: hf,
     minutosParo: minutosEntre(hi, hf),
+    turno: document.getElementById('f_turno').value,
+    tiempoExtra: document.getElementById('f_extra').checked,
     registradoEn: new Date().toISOString(),
     numeroParte, parteDesc,
     foto: fotoTemp || '',
@@ -1361,6 +1454,20 @@ async function renderAdmin(){
     <button class="btn secondary" onclick="abrirVista('analisis')">Abrir panel de análisis</button>
   </div>
   <div class="card">
+    <h2>🕐 Horarios de turnos</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Define el horario de cada turno. Se usa para asignar el turno automáticamente y para saber si alguien puede recibir notificaciones.</p>
+    ${Object.entries(STATE.turnosCfg||DEFAULT_TURNOS).map(([k,t])=>`
+      <div class="planta-block">
+        <h3 style="margin:0 0 8px;font-size:13.5px;">${escapeHtml(t.nombre)} (${k})</h3>
+        <div class="row2">
+          <div class="field"><label>Entrada</label><input id="tur_${k}_ini" type="time" value="${t.inicio}"></div>
+          <div class="field"><label>Salida</label><input id="tur_${k}_fin" type="time" value="${t.fin}"></div>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);">Tiempos extra: ${(t.extras||[]).map(e=>e.etiqueta).join(' · ')||'—'}</div>
+      </div>`).join('')}
+    <button class="btn secondary" onclick="guardarTurnos()">💾 Guardar horarios</button>
+  </div>
+  <div class="card">
     <h2>🗄️ Historial de correctivos</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Útil para limpiar los datos de prueba antes de arrancar en producción.</p>
     <div id="hist_info" style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;">Cargando...</div>
@@ -1470,6 +1577,18 @@ async function eliminarUsuario(nombre){
   await deleteUsuario(nombre);
   showToast('Usuario eliminado ✓');
   render();
+}
+
+async function guardarTurnos(){
+  const nuevo = JSON.parse(JSON.stringify(STATE.turnosCfg || DEFAULT_TURNOS));
+  Object.keys(nuevo).forEach(k=>{
+    const i = document.getElementById('tur_'+k+'_ini'), f = document.getElementById('tur_'+k+'_fin');
+    if(i) nuevo[k].inicio = i.value;
+    if(f) nuevo[k].fin = f.value;
+  });
+  STATE.turnosCfg = nuevo;
+  await saveTurnosConfig(nuevo);
+  showToast('Horarios actualizados ✓');
 }
 
 async function guardarCodigos(){
@@ -1858,6 +1977,105 @@ function limpiarAutorelleno(ids, permitidos){
   });
 }
 
+/* ---------- Alertas de jornada ---------- */
+let intervaloJornada = null;
+
+function iniciarVigilanciaJornada(){
+  if(intervaloJornada) clearInterval(intervaloJornada);
+  if(!STATE.usuario?.turno || STATE.rol==='supervisor' || STATE.rol==='admin') return;
+  revisarJornada();
+  intervaloJornada = setInterval(revisarJornada, 60000);
+}
+
+function revisarJornada(){
+  if(!STATE.usuario?.turno) return;
+  const restan = minutosParaFinJornada(STATE.usuario);
+  const banner = document.getElementById('banner_jornada');
+  if(!banner) return;
+
+  if(restan === null){ banner.style.display='none'; return; }
+
+  if(restan <= 0){
+    banner.style.display = 'block';
+    banner.style.background = '#fde8e8';
+    banner.style.borderLeft = '5px solid #a13636';
+    banner.innerHTML = `<b style="color:#a13636;">🔴 Tu turno finalizó</b>
+      <div style="font-size:12.5px;margin:6px 0 8px;">Dejarás de recibir notificaciones. Si vas a quedarte en tiempo extra, selecciónalo:</div>
+      ${botonesExtra()}`;
+  } else if(restan <= 20){
+    banner.style.display = 'block';
+    banner.style.background = '#fff7e6';
+    banner.style.borderLeft = '5px solid #e0b400';
+    banner.innerHTML = `<b style="color:#8a6d1f;">⏰ Tu turno termina en ${restan} minuto(s)</b>
+      <div style="font-size:12.5px;margin:6px 0 8px;">¿Te quedas en tiempo extra?</div>
+      ${botonesExtra()}`;
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function botonesExtra(){
+  const T = STATE.turnosCfg || DEFAULT_TURNOS;
+  const t = T[STATE.usuario.turno];
+  if(!t || !t.extras) return '';
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+    ${t.extras.map((e,i)=>`<button class="btn small secondary" onclick="activarTiempoExtra(${i})">⏱️ ${e.etiqueta}</button>`).join('')}
+    <button class="btn small ghost" onclick="cerrarBannerJornada()">No, me retiro</button>
+  </div>`;
+}
+
+async function activarTiempoExtra(idx){
+  const T = STATE.turnosCfg || DEFAULT_TURNOS;
+  const t = T[STATE.usuario.turno];
+  const extra = t.extras[idx];
+  STATE.usuario.extraInicio = extra.inicio;
+  STATE.usuario.extraFin = extra.fin;
+  try{ await saveUsuario(STATE.usuario); }catch(e){}
+  showToast(`⏱️ Tiempo extra activado hasta las ${extra.fin}`);
+  revisarJornada();
+}
+
+function cerrarBannerJornada(){
+  const b = document.getElementById('banner_jornada');
+  if(b) b.style.display = 'none';
+}
+
+/* Aviso al entrar fuera del horario normal del turno */
+function avisoEntradaAnticipada(){
+  if(!STATE.usuario?.turno) return '';
+  const T = STATE.turnosCfg || DEFAULT_TURNOS;
+  const t = T[STATE.usuario.turno];
+  if(!t) return '';
+  const m = ahoraMin();
+  if(dentroDeRango(m, t.inicio, t.fin)) return '';
+
+  /* ¿Coincide con algún horario de tiempo extra? */
+  const extraCoincide = (t.extras||[]).find(e => dentroDeRango(m, e.inicio, e.fin));
+  if(extraCoincide){
+    return `<div class="card" style="background:#fff7e6;border-color:#f0c674;">
+      <h2>⏱️ Entrada fuera de tu horario normal</h2>
+      <p style="font-size:13.5px;margin-top:-8px;">Tu ${t.nombre} va de <b>${t.inicio}</b> a <b>${t.fin}</b>, pero estás entrando ahora.
+      Esto corresponde a tiempo extra <b>${extraCoincide.etiqueta}</b>.</p>
+      <button class="btn secondary" onclick="activarTiempoExtraPorEtiqueta('${extraCoincide.inicio}','${extraCoincide.fin}')">Confirmar tiempo extra hasta las ${extraCoincide.fin}</button>
+    </div>`;
+  }
+  return `<div class="card" style="background:#fdeaea;border-color:#e0a0a0;">
+    <h2>🕐 Estás fuera de tu turno</h2>
+    <p style="font-size:13.5px;margin-top:-8px;">Tu ${t.nombre} va de <b>${t.inicio}</b> a <b>${t.fin}</b>. Puedes seguir usando el sistema, pero no recibirás notificaciones hasta tu horario.</p>
+    ${botonesExtra()}
+  </div>`;
+}
+
+async function activarTiempoExtraPorEtiqueta(inicio, fin){
+  STATE.usuario.extraInicio = inicio;
+  STATE.usuario.extraFin = fin;
+  try{ await saveUsuario(STATE.usuario); }catch(e){}
+  showToast(`⏱️ Tiempo extra confirmado hasta las ${fin}`);
+  render();
+}
+
+/* ---------- Alertas de jornada (fin) ---------- */
+
 /* ---------- Validación de tiempos ---------- */
 function validarTiempos(){
   const fEl=document.getElementById('f_fecha'), hiEl=document.getElementById('f_hi'), hfEl=document.getElementById('f_hf');
@@ -1883,6 +2101,9 @@ function validarTiempos(){
     if(hiEl.value && hiEl.value > horaAhora){ hiEl.value = horaAhora; mostrar('⚠️ La hora de inicio no puede ser futura. Se ajustó a la hora actual.','error'); }
     if(hfEl.value && hfEl.value > horaAhora){ hfEl.value = horaAhora; mostrar('⚠️ La hora final no puede ser futura. Se ajustó a la hora actual.','error'); }
   }
+
+  const tEl = document.getElementById('f_turno');
+  if(tEl && hiEl.value && !tEl.dataset.manual) tEl.value = turnoDeHora(hiEl.value);
 
   if(hiEl.value && hfEl.value){
     const min = minutosEntre(hiEl.value, hfEl.value);
