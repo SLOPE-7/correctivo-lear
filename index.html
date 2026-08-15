@@ -263,11 +263,11 @@ function todasLasUbts(plantasCfg){
 function desempacarExtra(extra){
   const e = extra || {};
   if(Object.prototype.hasOwnProperty.call(e, '__ubts')){
-    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado };
+    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre' };
   }
   const limpio = { ...e };
-  delete limpio.__bloqueado;
-  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado };
+  delete limpio.__bloqueado; delete limpio.__firma; delete limpio.__modoFirma;
+  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre' };
 }
 
 async function getUsuario(nombre){
@@ -284,7 +284,7 @@ async function saveUsuario(u){
     prefer: 'resolution=merge-duplicates,return=minimal',
     body: JSON.stringify({
       nombre_slug: slug(u.nombre), nombre: u.nombre, rol: u.rol,
-      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado }
+      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado, __firma: u.firma || '', __modoFirma: u.modoFirma || 'nombre' }
     })
   });
 }
@@ -398,6 +398,26 @@ async function render(){
     return;
   }
 
+  if(STATE.vista === 'analisis' && ['tecnico','supervisor','admin'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAnalisis()}</div>`;
+    setTimeout(()=>{ calcularTiempoMuerto(); calcularFallasFrecuentes(); cargarRefaccionesAnalisis(); }, 50);
+    return;
+  }
+  if(STATE.vista === 'reportar' && STATE.rol==='tecnico'){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${renderReportarFalla()}</div>`;
+    setTimeout(()=>{ cargarMisReportes(); cargarListaPartesRp(); }, 50);
+    return;
+  }
+  if(STATE.vista === 'firma' && STATE.usuario){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${renderRegistroFirma()}</div>`;
+    setTimeout(iniciarCanvasFirma, 60);
+    return;
+  }
+  if(STATE.vista === 'buzon' && STATE.rol==='supervisor'){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderBuzonSupervisor()}</div>`;
+    return;
+  }
+
   const rolesConPlanta = ['tecnico','auditor','apqp'];
   if(rolesConPlanta.includes(STATE.rol) && !STATE.plantaHoy){
     app.innerHTML = renderTopbar() + renderPlantaPicker();
@@ -423,6 +443,7 @@ async function render(){
   }
   app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap">${body}</div>`;
   if(STATE.rol==='supervisor') setTimeout(filtrarSupervisor, 50);
+  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(cargarListaPartes, 50);
 }
 
 function renderTopbar(){
@@ -441,10 +462,14 @@ function renderTopbar(){
     <div class="tb-actions">
       <button class="tb-btn" onclick="irInicio()" title="Inicio">🏠<span>Inicio</span></button>
       <button class="tb-btn" onclick="actualizarDatos()" title="Actualizar">🔄<span>Actualizar</span></button>
-      ${puedeVerTodo && !STATE.viendoTodo ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos">👁️<span>Correctivos</span></button>`:''}
+      ${puedeVerTodo && !STATE.viendoTodo && !STATE.vista ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos">👁️<span>Correctivos</span></button>`:''}
+      ${STATE.rol==='tecnico' && STATE.plantaHoy && !STATE.viendoTodo ? `<button class="tb-btn ${STATE.vista==='reportar'?'on':''}" onclick="abrirVista('reportar')" title="Reportar al supervisor">📢<span>Reportar</span></button>`:''}
+      ${['tecnico','supervisor'].includes(STATE.rol) ? `<button class="tb-btn ${STATE.vista==='analisis'?'on':''}" onclick="abrirVista('analisis')" title="Reportes y análisis">📊<span>Análisis</span></button>`:''}
+      ${STATE.rol==='supervisor' ? `<button class="tb-btn ${STATE.vista==='buzon'?'on':''}" onclick="abrirVista('buzon')" title="Reportes recibidos">📬<span>Buzón</span></button>`:''}
       ${STATE.viendoTodo ? `<button class="tb-btn" onclick="volverDeVerTodo()">←<span>Volver</span></button>`:''}
       ${esAuditorTipo && STATE.usuario && STATE.plantaHoy && !STATE.viendoTodo ? `<button class="tb-btn" onclick="editarUbts()" title="Mis UBTs">📋<span>Mis UBTs</span></button>`:''}
       ${rolesConPlanta.includes(STATE.rol) && STATE.plantaHoy && !STATE.viendoTodo ? `<button class="tb-btn" onclick="cambiarPlanta()" title="Cambiar planta">🏭<span>Planta</span></button>`:''}
+      ${STATE.usuario ? `<button class="tb-btn ${STATE.vista==='firma'?'on':''}" onclick="abrirVista('firma')" title="Mi firma">✍️<span>Firma</span></button>` : ''}
       ${STATE.usuario ? `<button class="tb-btn ${notifOn?'on':''}" onclick="activarNotificaciones(false)" title="Notificaciones">${notifOn?'🔔':'🔕'}<span>Avisos</span></button>` : ''}
       <button class="tb-btn salir" onclick="cambiarRol()" title="Salir">🚪<span>Salir</span></button>
     </div>
@@ -454,7 +479,9 @@ function editarUbts(){ STATE.editandoUbts = true; render(); }
 function cambiarPlanta(){ STATE.plantaHoy = null; STATE.ubtElegida = null; sheetActivaKey = null; render(); }
 function verCorrectivos(){ STATE.viendoTodo = true; render(); }
 function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
+function abrirVista(v){ STATE.vista = (STATE.vista===v) ? null : v; STATE.viendoTodo=false; render(); }
 function irInicio(){
+  STATE.vista = null;
   STATE.viendoTodo = false; STATE.editandoUbts = false;
   STATE.ubtElegida = null; sheetActivaKey = null; sheetActivaParams = null;
   render();
@@ -752,14 +779,28 @@ async function renderTecnico(){
         <button class="btn secondary" onclick="siguientePagina()">➕ Abrir Página ${sheetActivaParams.pagina+1}</button>
       ` : `
       <div class="row3">
-        <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${todayISO()}"></div>
-        <div class="field"><label>Hora Inicio</label><input id="f_hi" type="time" onchange="ajustarHoraFinal()"></div>
-        <div class="field"><label>Hora Final</label><input id="f_hf" type="time"></div>
+        <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${todayISO()}" max="${todayISO()}" onchange="validarTiempos()"></div>
+        <div class="field"><label>Hora Inicio</label><input id="f_hi" type="time" onchange="validarTiempos()"></div>
+        <div class="field"><label>Hora Final</label><input id="f_hf" type="time" onchange="validarTiempos()"></div>
       </div>
+      <div id="aviso_tiempo" style="display:none;font-size:12.5px;padding:8px 10px;border-radius:8px;margin-bottom:10px;"></div>
       <div class="field"><label>No. Gafete</label><input id="f_gafete" value="${STATE.usuario?.gafete||''}"></div>
-      <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas"></textarea></div>
+      <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas" oninput="buscarFallasSimilares()"></textarea></div>
+      <div id="fallas_similares" style="display:none;background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;"></div>
       <div class="field"><label>Acciones Correctivas</label><textarea id="f_acciones"></textarea></div>
       <div class="field"><label>Material utilizado en modificación</label><textarea id="f_material"></textarea></div>
+      <div class="row2">
+        <div class="field"><label>No. de Parte (refacción)</label>
+          <input id="f_parte" list="lista_partes" placeholder="Ej. 02P201GFS1" autocomplete="off">
+          <datalist id="lista_partes"></datalist>
+        </div>
+        <div class="field"><label>Descripción de la refacción</label><input id="f_parte_desc" placeholder="Opcional"></div>
+      </div>
+      <div class="field">
+        <label>📷 Foto de la falla (opcional)</label>
+        <input type="file" id="f_foto" accept="image/*" capture="environment" onchange="previsualizarFoto(this,'prev_foto')">
+        <div id="prev_foto" style="margin-top:8px;"></div>
+      </div>
       <label class="checkline"><input type="checkbox" id="f_movio"> Se movió módulo de posición</label>
       <label class="checkline"><input type="checkbox" id="f_verifico"> Se verificó módulo quede en cuadrante especificado</label>
       <label class="checkline"><input type="checkbox" id="f_solicitar_apqp"> 📩 Solicitar firma de APQP (le da acceso a este registro)</label>
@@ -803,12 +844,21 @@ async function agregarFila(){
   if(!sintomas){ showToast('⚠️ Escribe los Síntomas/Fallas'); return; }
   const sheet = await getSheet(sheetActivaKey);
   if((sheet.filas||[]).length >= MAX_FILAS_POR_HOJA){ showToast('⚠️ Esta hoja ya está llena'); render(); return; }
+  if(!validarTiempos()){ showToast('⚠️ Revisa las horas antes de guardar'); return; }
   const solicitarApqp = document.getElementById('f_solicitar_apqp').checked;
+  const hi = document.getElementById('f_hi').value;
+  const hf = document.getElementById('f_hf').value;
+  const numeroParte = document.getElementById('f_parte').value.trim();
+  const parteDesc = document.getElementById('f_parte_desc').value.trim();
   const fila = {
     id: uid(),
     fecha: document.getElementById('f_fecha').value,
-    horaInicio: document.getElementById('f_hi').value,
-    horaFinal: document.getElementById('f_hf').value,
+    horaInicio: hi,
+    horaFinal: hf,
+    minutosParo: minutosEntre(hi, hf),
+    registradoEn: new Date().toISOString(),
+    numeroParte, parteDesc,
+    foto: fotoTemp || '',
     gafete: document.getElementById('f_gafete').value.trim(),
     sintomas, acciones: document.getElementById('f_acciones').value.trim(),
     material: document.getElementById('f_material').value.trim(),
@@ -824,6 +874,8 @@ async function agregarFila(){
   sheet.filas.push(fila);
   try{ await saveSheet(sheetActivaKey, sheet); }
   catch(err){ showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
+  if(numeroParte) registrarRefaccion(numeroParte, parteDesc);
+  fotoTemp = null; cacheHojasFallas = null;
 
   /* Notificar al auditor de calidad asignado a este UBT */
   const auditores = await destinatariosPara('auditor', sheet.planta, sheet.ubtNo);
@@ -875,6 +927,7 @@ async function firmarAuditor(sheetKeyStr, filaId){
   const fila = sheet.filas.find(f=>f.id===filaId);
   if(!fila) return;
   fila.firmaAuditorNombre = STATE.nombre; fila.firmaAuditorFecha = nowLabel(); fila.estadoAuditor = 'firmado';
+  fila.firmaAuditorImg = (STATE.usuario?.modoFirma==='dibujo' && STATE.usuario?.firma) ? STATE.usuario.firma : '';
   await saveSheet(sheetKeyStr, sheet);
   enviarNotificacion(
     [slug(fila.tecnico)],
@@ -909,6 +962,7 @@ async function firmarApqp(sheetKeyStr, filaId){
   const fila = sheet.filas.find(f=>f.id===filaId);
   if(!fila) return;
   fila.firmaAPQPNombre = STATE.nombre; fila.firmaAPQPFecha = nowLabel(); fila.estadoAPQP = 'firmado';
+  fila.firmaAPQPImg = (STATE.usuario?.modoFirma==='dibujo' && STATE.usuario?.firma) ? STATE.usuario.firma : '';
   await saveSheet(sheetKeyStr, sheet);
   enviarNotificacion(
     [slug(fila.tecnico)],
@@ -1176,14 +1230,14 @@ function renderSheetVisual(sheet, opts){
   }).join('');
   const filasHtml = filas.length===0 ? `<tr><td colspan="13" style="color:#999;">Sin registros todavía</td></tr>` :
     filas.map(f=>{
-      const auditorCell = f.estadoAuditor==='firmado' ? `<span class="firma-ok">${escapeHtml(f.firmaAuditorNombre)}</span>`
+      const auditorCell = f.estadoAuditor==='firmado' ? (f.firmaAuditorImg ? `<img src="${f.firmaAuditorImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.firmaAuditorNombre)}</span>` : `<span class="firma-ok">${escapeHtml(f.firmaAuditorNombre)}</span>`)
         : (opts.role==='auditor' ? `<button class="firma-btn" onclick="firmarAuditor('${sheet.key}','${f.id}')">Firmar</button>` : 'Pendiente');
       let apqpCell = 'N/A';
-      if(f.estadoAPQP==='firmado') apqpCell = `<span class="firma-ok">${escapeHtml(f.firmaAPQPNombre)}</span>`;
+      if(f.estadoAPQP==='firmado') apqpCell = f.firmaAPQPImg ? `<img src="${f.firmaAPQPImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.firmaAPQPNombre)}</span>` : `<span class="firma-ok">${escapeHtml(f.firmaAPQPNombre)}</span>`;
       else if(f.estadoAPQP==='pendiente') apqpCell = (opts.role==='apqp' ? `<button class="firma-btn" onclick="firmarApqp('${sheet.key}','${f.id}')">Firmar</button>` : 'Pendiente');
       return `<tr>
         <td>${f.fecha||''}</td><td>${escapeHtml(f.gafete)}</td><td>${f.horaInicio||''}</td><td>${f.horaFinal||''}</td>
-        <td class="left">${escapeHtml(f.sintomas)}</td><td class="left">${escapeHtml(f.acciones)}</td><td class="left">${escapeHtml(f.material)}</td>
+        <td class="left">${escapeHtml(f.sintomas)}${f.minutosParo?`<br><span style="color:#0f3d5c;font-size:8px;">⏱️ ${formatoDuracion(f.minutosParo)}</span>`:''}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:8px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td><td class="left">${escapeHtml(f.acciones)}</td><td class="left">${escapeHtml(f.material)}${f.numeroParte?`<br><span style="font-size:8px;color:#0f3d5c;"><b>P/N:</b> ${escapeHtml(f.numeroParte)}</span>`:''}</td>
         <td>${escapeHtml(f.tecnico)}</td><td>${auditorCell}</td><td>${f.seMovioModulo?'Sí':'No'}</td><td>${f.seVerificoModulo?'Sí':'No'}</td><td>${apqpCell}</td>
         <td class="no-print">
           <button class="edit-btn" onclick="pedirClaveEditar('${sheet.key}','${f.id}')">✏️ Editar</button>
@@ -1286,6 +1340,11 @@ async function renderAdmin(){
           </table></div>
         </details>`;
       }).join('')}
+  </div>
+  <div class="card">
+    <h2>📊 Reportes y análisis</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Tiempo muerto, fallas frecuentes, refacciones y exportación a Excel.</p>
+    <button class="btn secondary" onclick="abrirVista('analisis')">Abrir panel de análisis</button>
   </div>
   <div class="card">
     <h2>🗄️ Historial de correctivos</h2>
@@ -1766,6 +1825,636 @@ function limpiarFiltrosVt(){
   const a=document.getElementById('vt_filtro_planta'), b=document.getElementById('vt_filtro_ubt');
   if(a) a.value=''; if(b) b.value='';
   filtrarVerTodo();
+}
+
+
+function verFoto(id){
+  const el = document.getElementById('foto_'+id);
+  if(el) el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+
+/* ---------- Validación de tiempos ---------- */
+function validarTiempos(){
+  const fEl=document.getElementById('f_fecha'), hiEl=document.getElementById('f_hi'), hfEl=document.getElementById('f_hf');
+  const aviso=document.getElementById('aviso_tiempo');
+  if(!fEl||!hiEl||!hfEl||!aviso) return true;
+
+  const hoy = todayISO();
+  const ahora = new Date();
+  const horaAhora = String(ahora.getHours()).padStart(2,'0')+':'+String(ahora.getMinutes()).padStart(2,'0');
+
+  const mostrar=(txt,tipo)=>{
+    aviso.style.display='block';
+    aviso.innerHTML=txt;
+    aviso.style.background = tipo==='error' ? '#fde8e8' : '#fff7e6';
+    aviso.style.color = tipo==='error' ? '#a13636' : '#8a6d1f';
+    aviso.style.borderLeft = '4px solid ' + (tipo==='error' ? '#a13636' : '#e0b400');
+  };
+
+  if(fEl.value > hoy){ fEl.value = hoy; mostrar('⚠️ No se pueden registrar fechas futuras. Se ajustó a hoy.','error'); return false; }
+
+  /* Si es hoy, no permitir horas futuras */
+  if(fEl.value === hoy){
+    if(hiEl.value && hiEl.value > horaAhora){ hiEl.value = horaAhora; mostrar('⚠️ La hora de inicio no puede ser futura. Se ajustó a la hora actual.','error'); }
+    if(hfEl.value && hfEl.value > horaAhora){ hfEl.value = horaAhora; mostrar('⚠️ La hora final no puede ser futura. Se ajustó a la hora actual.','error'); }
+  }
+
+  if(hiEl.value && hfEl.value){
+    const min = minutosEntre(hiEl.value, hfEl.value);
+    if(min === 0){ mostrar('⚠️ La hora final debe ser distinta a la de inicio.','error'); return false; }
+    if(min > 480){ mostrar(`⏱️ Duración registrada: <b>${formatoDuracion(min)}</b>. Es bastante larga — verifica que sea correcta.`,'warn'); return true; }
+    mostrar(`⏱️ Tiempo muerto: <b>${formatoDuracion(min)}</b>`,'warn');
+    return true;
+  }
+  aviso.style.display='none';
+  return true;
+}
+
+/* ---------- Fallas similares (detección de recurrencia) ---------- */
+let cacheHojasFallas = null;
+async function buscarFallasSimilares(){
+  const txtEl = document.getElementById('f_sintomas');
+  const cont = document.getElementById('fallas_similares');
+  if(!txtEl || !cont) return;
+  const txt = txtEl.value.trim().toLowerCase();
+  if(txt.length < 5){ cont.style.display='none'; return; }
+
+  if(!cacheHojasFallas) cacheHojasFallas = await listSheets();
+  const sheet = await getSheet(sheetActivaKey);
+  if(!sheet) return;
+
+  const palabras = txt.split(/\s+/).filter(w=>w.length>3);
+  const coincidencias = [];
+  cacheHojasFallas
+    .filter(h => h.planta===sheet.planta && h.ubtNo===sheet.ubtNo && h.maquina===sheet.maquina)
+    .forEach(h => (h.filas||[]).forEach(f=>{
+      const sint = (f.sintomas||'').toLowerCase();
+      const aciertos = palabras.filter(w=>sint.includes(w)).length;
+      if(aciertos >= 1 && aciertos/palabras.length >= 0.4) coincidencias.push({...f, mes:h.mes, anio:h.anio, aciertos});
+    }));
+
+  if(coincidencias.length === 0){ cont.style.display='none'; return; }
+  coincidencias.sort((a,b)=>b.aciertos-a.aciertos);
+  const top = coincidencias.slice(0,4);
+  cont.style.display='block';
+  cont.innerHTML = `<b>🔁 Falla recurrente detectada</b> — esta máquina ya tuvo ${coincidencias.length} falla(s) parecida(s):<br>` +
+    top.map(f=>`• <b>${f.fecha||''}</b>: ${escapeHtml((f.sintomas||'').slice(0,90))}${(f.sintomas||'').length>90?'…':''}<br><span style="color:#6b7280;">→ ${escapeHtml((f.acciones||'—').slice(0,90))}</span>`).join('<br>') +
+    `<br><span style="color:#8a6d1f;">Considera revisar la causa raíz, no solo el síntoma.</span>`;
+}
+
+/* ---------- Fotos ---------- */
+let fotoTemp = null;
+async function previsualizarFoto(input, contId){
+  const cont = document.getElementById(contId);
+  const file = input.files && input.files[0];
+  if(!file){ fotoTemp=null; if(cont) cont.innerHTML=''; return; }
+  if(cont) cont.innerHTML = '<span style="font-size:12.5px;color:#6b7280;">Procesando imagen...</span>';
+  try{
+    fotoTemp = await comprimirImagen(file);
+    if(cont) cont.innerHTML = `<img src="${fotoTemp}" style="max-width:200px;border-radius:8px;border:1px solid #ddd;">
+      <button class="btn ghost small" style="margin-left:8px;" onclick="quitarFoto('${input.id}','${contId}')">✖ Quitar</button>`;
+  }catch(e){ if(cont) cont.innerHTML = '<span style="color:#a13636;font-size:12.5px;">No se pudo procesar la imagen.</span>'; }
+}
+function quitarFoto(inputId, contId){
+  fotoTemp = null;
+  const i = document.getElementById(inputId); if(i) i.value='';
+  const c = document.getElementById(contId); if(c) c.innerHTML='';
+}
+
+async function cargarListaPartes(){
+  const dl = document.getElementById('lista_partes');
+  if(!dl) return;
+  const refs = await listRefacciones();
+  dl.innerHTML = refs.map(r=>`<option value="${escapeHtml(r.numero_parte)}">${escapeHtml(r.descripcion||'')}</option>`).join('');
+}
+
+/* ---------- Refacciones (catálogo de números de parte) ---------- */
+async function listRefacciones(){
+  try{ return await sbFetch('refacciones?select=*&order=veces_usada.desc') || []; }
+  catch(e){ console.warn(e); return []; }
+}
+async function registrarRefaccion(numeroParte, descripcion){
+  if(!numeroParte) return;
+  try{
+    const existente = await sbFetch('refacciones?numero_parte=eq.'+encodeURIComponent(numeroParte)+'&select=*');
+    const veces = (existente && existente[0]) ? (existente[0].veces_usada||0)+1 : 1;
+    await sbFetch('refacciones?on_conflict=numero_parte', {
+      method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+      body: JSON.stringify({ numero_parte:numeroParte, descripcion: descripcion||((existente&&existente[0])?existente[0].descripcion:''), veces_usada:veces, ultima_vez:new Date().toISOString() })
+    });
+  }catch(e){ console.warn(e); }
+}
+
+/* ---------- Firma dibujada ---------- */
+let firmaCanvas = null, firmaCtx = null, dibujando = false;
+
+function renderRegistroFirma(){
+  const tiene = !!(STATE.usuario?.firma);
+  return `
+  <div class="card">
+    <h2>✍️ Mi firma</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Dibuja tu firma con el dedo o el mouse. Se guardará y podrás usarla al firmar registros.</p>
+    ${tiene?`<div style="margin-bottom:12px;"><b style="font-size:12.5px;">Firma actual:</b><br><img src="${STATE.usuario.firma}" style="max-width:250px;border:1px solid #ddd;border-radius:8px;background:#fff;"></div>`:''}
+    <canvas id="firma_canvas" width="500" height="180" style="border:2px dashed #ccd1d6;border-radius:10px;background:#fff;width:100%;max-width:500px;touch-action:none;cursor:crosshair;"></canvas>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button class="btn small ghost" onclick="limpiarFirma()">🧹 Limpiar</button>
+      <button class="btn small secondary" onclick="guardarFirma()">💾 Guardar firma</button>
+      ${tiene?`<button class="btn small ghost" style="color:#a13636;" onclick="borrarFirma()">🗑 Borrar firma guardada</button>`:''}
+    </div>
+    <div class="field" style="margin-top:16px;">
+      <label>¿Cómo quieres firmar los registros?</label>
+      <select id="modo_firma" onchange="guardarModoFirma()">
+        <option value="nombre" ${STATE.usuario?.modoFirma!=='dibujo'?'selected':''}>Con mi nombre (texto)</option>
+        <option value="dibujo" ${STATE.usuario?.modoFirma==='dibujo'?'selected':''}>Con mi firma dibujada</option>
+      </select>
+    </div>
+  </div>`;
+}
+
+function iniciarCanvasFirma(){
+  firmaCanvas = document.getElementById('firma_canvas');
+  if(!firmaCanvas) return;
+  firmaCtx = firmaCanvas.getContext('2d');
+  firmaCtx.lineWidth = 2.5; firmaCtx.lineCap = 'round'; firmaCtx.strokeStyle = '#111';
+
+  const pos = e => {
+    const r = firmaCanvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x:(p.clientX-r.left)*(firmaCanvas.width/r.width), y:(p.clientY-r.top)*(firmaCanvas.height/r.height) };
+  };
+  const empezar = e => { e.preventDefault(); dibujando=true; const {x,y}=pos(e); firmaCtx.beginPath(); firmaCtx.moveTo(x,y); };
+  const mover = e => { if(!dibujando) return; e.preventDefault(); const {x,y}=pos(e); firmaCtx.lineTo(x,y); firmaCtx.stroke(); };
+  const parar = () => { dibujando=false; };
+
+  ['mousedown','touchstart'].forEach(ev=>firmaCanvas.addEventListener(ev, empezar));
+  ['mousemove','touchmove'].forEach(ev=>firmaCanvas.addEventListener(ev, mover));
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>firmaCanvas.addEventListener(ev, parar));
+}
+
+function limpiarFirma(){ if(firmaCtx && firmaCanvas) firmaCtx.clearRect(0,0,firmaCanvas.width,firmaCanvas.height); }
+
+async function guardarFirma(){
+  if(!firmaCanvas){ showToast('⚠️ No se encontró el área de firma'); return; }
+  const vacio = document.createElement('canvas');
+  vacio.width = firmaCanvas.width; vacio.height = firmaCanvas.height;
+  if(firmaCanvas.toDataURL() === vacio.toDataURL()){ showToast('⚠️ Dibuja tu firma primero'); return; }
+  STATE.usuario.firma = firmaCanvas.toDataURL('image/png');
+  try{ await saveUsuario(STATE.usuario); showToast('✍️ Firma guardada ✓'); render(); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); }
+}
+async function borrarFirma(){
+  STATE.usuario.firma = '';
+  STATE.usuario.modoFirma = 'nombre';
+  await saveUsuario(STATE.usuario);
+  showToast('Firma borrada');
+  render();
+}
+async function guardarModoFirma(){
+  const modo = document.getElementById('modo_firma').value;
+  if(modo === 'dibujo' && !STATE.usuario.firma){ showToast('⚠️ Primero guarda tu firma dibujada'); document.getElementById('modo_firma').value='nombre'; return; }
+  STATE.usuario.modoFirma = modo;
+  await saveUsuario(STATE.usuario);
+  showToast('Preferencia guardada ✓');
+}
+
+async function cargarListaPartesRp(){
+  const dl = document.getElementById('lista_partes_rp');
+  if(!dl) return;
+  const refs = await listRefacciones();
+  dl.innerHTML = refs.map(r=>`<option value="${escapeHtml(r.numero_parte)}">${escapeHtml(r.descripcion||'')}</option>`).join('');
+}
+
+/* ---------- Buzón del Supervisor ---------- */
+async function renderBuzonSupervisor(){
+  const todos = await listReportes();
+  const abiertos = todos.filter(r=>r.estado!=='cerrado');
+  const cerrados = todos.filter(r=>r.estado==='cerrado');
+  const criticos = abiertos.filter(r=>r.urgencia==='critica');
+
+  return `
+  <div class="card">
+    <h2>📬 Reportes abiertos (${abiertos.length})</h2>
+    ${criticos.length>0?`<div style="background:#fde8e8;border-left:4px solid #a13636;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13.5px;color:#a13636;"><b>🔴 ${criticos.length} reporte(s) CRÍTICO(S)</b> requieren tu atención inmediata.</div>`:''}
+    ${abiertos.length===0 ? '<div class="empty">No hay reportes pendientes. ✓</div>' :
+      abiertos
+        .sort((a,b)=>{
+          const orden={critica:0,alta:1,normal:2};
+          return (orden[a.urgencia]??3)-(orden[b.urgencia]??3) || new Date(b.creado_en)-new Date(a.creado_en);
+        })
+        .map(r=>tarjetaReporte(r,true)).join('')}
+  </div>
+  <div class="card">
+    <h2>✓ Reportes atendidos (${cerrados.length})</h2>
+    ${cerrados.length===0 ? '<div class="empty">Todavía no hay reportes cerrados.</div>' :
+      cerrados.slice(0,15).map(r=>tarjetaReporte(r,false)).join('')}
+  </div>`;
+}
+
+/* ---------- Reportes y análisis (Técnico, Supervisor, Admin) ---------- */
+let cacheAnalisis = null;
+
+async function renderAnalisis(){
+  cacheAnalisis = await listSheets();
+  return `
+  <div class="card">
+    <h2>🔎 Buscador general</h2>
+    <div class="field">
+      <input id="an_busqueda" placeholder="Buscar por síntoma, técnico, material, No. de parte..." oninput="ejecutarBusqueda()" autocomplete="off">
+    </div>
+    <div id="an_resultados"></div>
+  </div>
+  <div class="card">
+    <h2>⏱️ Tiempo muerto por máquina</h2>
+    <div class="filters">
+      <select id="an_planta" onchange="calcularTiempoMuerto()">
+        <option value="">Todas las plantas</option>
+        ${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}
+      </select>
+      <select id="an_mes" onchange="calcularTiempoMuerto()">
+        <option value="">Todos los meses</option>
+        ${MESES.map(m=>`<option>${m}</option>`).join('')}
+      </select>
+    </div>
+    <div id="an_tiempo"></div>
+    <button class="btn secondary" style="margin-top:12px;" onclick="exportarCSV('tiempo')">📊 Exportar este reporte a CSV</button>
+  </div>
+  <div class="card">
+    <h2>🔁 Fallas más frecuentes</h2>
+    <div id="an_frecuentes"></div>
+  </div>
+  <div class="card">
+    <h2>📦 Refacciones más usadas</h2>
+    <div id="an_refacciones"><div class="empty">Cargando...</div></div>
+  </div>
+  <div class="card">
+    <h2>📥 Exportar datos</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Descarga en formato CSV, listo para abrir en Excel.</p>
+    <button class="btn secondary" onclick="exportarCSV('registros')">📄 Todos los registros de correctivo</button>
+    <button class="btn secondary" style="margin-top:8px;" onclick="exportarCSV('tiempo')">⏱️ Resumen de tiempo muerto</button>
+    <button class="btn secondary" style="margin-top:8px;" onclick="exportarCSV('reportes')">📢 Reportes al supervisor</button>
+  </div>`;
+}
+
+function todasLasFilas(){
+  const out = [];
+  (cacheAnalisis||[]).forEach(h => (h.filas||[]).forEach(f => out.push({...f, planta:h.planta, ubtNo:h.ubtNo, maquina:h.maquina, mes:h.mes, anio:h.anio})));
+  return out;
+}
+
+function ejecutarBusqueda(){
+  const q = (document.getElementById('an_busqueda').value||'').trim().toLowerCase();
+  const cont = document.getElementById('an_resultados');
+  if(q.length < 2){ cont.innerHTML = '<div class="empty">Escribe al menos 2 caracteres.</div>'; return; }
+  const res = todasLasFilas().filter(f =>
+    (f.sintomas||'').toLowerCase().includes(q) ||
+    (f.acciones||'').toLowerCase().includes(q) ||
+    (f.material||'').toLowerCase().includes(q) ||
+    (f.tecnico||'').toLowerCase().includes(q) ||
+    (f.numeroParte||'').toLowerCase().includes(q) ||
+    (f.maquina||'').toLowerCase().includes(q) ||
+    (f.ubtNo||'').toLowerCase().includes(q)
+  );
+  if(res.length === 0){ cont.innerHTML = '<div class="empty">Sin coincidencias.</div>'; return; }
+  cont.innerHTML = `<p style="font-size:12.5px;color:var(--muted);">${res.length} resultado(s)</p>` +
+    res.slice(0,60).map(f=>`
+      <div style="border:1px solid #e2e5e8;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px;">
+        <div style="font-weight:700;">${escapeHtml(f.maquina)} · UBT ${escapeHtml(f.ubtNo)} · ${escapeHtml(f.planta)}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:5px;">${f.fecha||''} · ${escapeHtml(f.tecnico||'')} · ${formatoDuracion(f.minutosParo)}</div>
+        <div><b>Falla:</b> ${escapeHtml(f.sintomas||'')}</div>
+        <div><b>Acción:</b> ${escapeHtml(f.acciones||'—')}</div>
+        ${f.numeroParte?`<div><b>No. Parte:</b> ${escapeHtml(f.numeroParte)}</div>`:''}
+      </div>`).join('') +
+    (res.length>60?'<div class="empty">Mostrando los primeros 60 resultados. Afina tu búsqueda.</div>':'');
+}
+
+function calcularTiempoMuerto(){
+  const planta = document.getElementById('an_planta').value;
+  const mes = document.getElementById('an_mes').value;
+  const cont = document.getElementById('an_tiempo');
+  let filas = todasLasFilas();
+  if(planta) filas = filas.filter(f=>f.planta===planta);
+  if(mes) filas = filas.filter(f=>f.mes===mes);
+
+  const porMaquina = {};
+  filas.forEach(f=>{
+    const clave = `${f.maquina} · UBT ${f.ubtNo}`;
+    porMaquina[clave] ??= { minutos:0, paros:0, planta:f.planta };
+    porMaquina[clave].minutos += (f.minutosParo||0);
+    porMaquina[clave].paros++;
+  });
+
+  const lista = Object.entries(porMaquina).sort((a,b)=>b[1].minutos-a[1].minutos);
+  if(lista.length === 0){ cont.innerHTML = '<div class="empty">Sin datos para este filtro.</div>'; return; }
+
+  const totalMin = lista.reduce((a,[,v])=>a+v.minutos,0);
+  const maxMin = lista[0][1].minutos || 1;
+
+  cont.innerHTML = `
+    <div style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13.5px;">
+      Total de paro: <b>${formatoDuracion(totalMin)}</b> en <b>${filas.length}</b> intervención(es)
+    </div>
+    ${lista.slice(0,20).map(([maq,v],i)=>`
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+          <span><b>${i+1}.</b> ${escapeHtml(maq)}</span>
+          <span style="font-weight:700;">${formatoDuracion(v.minutos)} <span style="font-weight:400;color:var(--muted);">(${v.paros} paro/s)</span></span>
+        </div>
+        <div style="background:#e8eaed;border-radius:20px;height:9px;overflow:hidden;">
+          <div style="background:${i<3?'#a13636':'#0f3d5c'};height:100%;width:${(v.minutos/maxMin*100).toFixed(1)}%;"></div>
+        </div>
+      </div>`).join('')}`;
+}
+
+function calcularFallasFrecuentes(){
+  const cont = document.getElementById('an_frecuentes');
+  if(!cont) return;
+  const filas = todasLasFilas();
+  const porMaquina = {};
+  filas.forEach(f=>{
+    const clave = `${f.maquina} · UBT ${f.ubtNo}`;
+    porMaquina[clave] ??= [];
+    porMaquina[clave].push(f);
+  });
+
+  const recurrentes = [];
+  Object.entries(porMaquina).forEach(([maq, fs])=>{
+    const grupos = {};
+    fs.forEach(f=>{
+      const palabras = (f.sintomas||'').toLowerCase().split(/\s+/).filter(w=>w.length>4);
+      palabras.forEach(w=>{ grupos[w] ??= new Set(); grupos[w].add(f.id); });
+    });
+    Object.entries(grupos).forEach(([palabra, ids])=>{
+      if(ids.size >= 2) recurrentes.push({ maquina:maq, palabra, veces:ids.size });
+    });
+  });
+
+  recurrentes.sort((a,b)=>b.veces-a.veces);
+  const top = recurrentes.slice(0,15);
+  cont.innerHTML = top.length === 0
+    ? '<div class="empty">Aún no hay suficientes datos para detectar patrones.</div>'
+    : `<p style="font-size:12.5px;color:var(--muted);">Palabras que se repiten en fallas de la misma máquina — posible causa raíz.</p>` +
+      top.map(r=>`
+        <div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #eef0f2;font-size:13px;">
+          <span>${escapeHtml(r.maquina)} → "<b>${escapeHtml(r.palabra)}</b>"</span>
+          <span style="font-weight:700;color:${r.veces>=4?'#a13636':'#c77700'};">${r.veces}×</span>
+        </div>`).join('');
+}
+
+async function cargarRefaccionesAnalisis(){
+  const cont = document.getElementById('an_refacciones');
+  if(!cont) return;
+  const refs = await listRefacciones();
+  cont.innerHTML = refs.length === 0
+    ? '<div class="empty">Todavía no se han registrado refacciones.</div>'
+    : `<table class="admin-tbl"><thead><tr><th>No. de Parte</th><th>Descripción</th><th>Veces usada</th><th>Última vez</th></tr></thead><tbody>` +
+      refs.slice(0,40).map(r=>`<tr><td><b>${escapeHtml(r.numero_parte)}</b></td><td>${escapeHtml(r.descripcion||'—')}</td><td>${r.veces_usada}</td><td>${r.ultima_vez?new Date(r.ultima_vez).toLocaleDateString('es-MX'):'—'}</td></tr>`).join('') +
+      `</tbody></table>`;
+}
+
+function descargarCSV(nombre, filas){
+  const csv = filas.map(f => f.map(c => {
+    const v = (c===null||c===undefined) ? '' : String(c);
+    return /[",\n;]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v;
+  }).join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click();
+  showToast('Archivo descargado ✓');
+}
+
+async function exportarCSV(tipo){
+  if(tipo === 'registros'){
+    const filas = [['Fecha','Planta','UBT','Maquina','Mes','Anio','Gafete','Tecnico','Hora Inicio','Hora Final','Minutos Paro','Sintomas','Acciones','Material','No. Parte','Firma Auditor','Firma APQP']];
+    todasLasFilas().forEach(f=>filas.push([
+      f.fecha||'', f.planta||'', f.ubtNo||'', f.maquina||'', f.mes||'', f.anio||'',
+      f.gafete||'', f.tecnico||'', f.horaInicio||'', f.horaFinal||'', f.minutosParo||0,
+      f.sintomas||'', f.acciones||'', f.material||'', f.numeroParte||'',
+      f.firmaAuditorNombre||'', f.firmaAPQPNombre||''
+    ]));
+    descargarCSV('correctivos-registros-'+todayISO()+'.csv', filas);
+  }
+  else if(tipo === 'tiempo'){
+    const porMaquina = {};
+    todasLasFilas().forEach(f=>{
+      const clave = `${f.planta}|${f.ubtNo}|${f.maquina}`;
+      porMaquina[clave] ??= { minutos:0, paros:0 };
+      porMaquina[clave].minutos += (f.minutosParo||0);
+      porMaquina[clave].paros++;
+    });
+    const filas = [['Planta','UBT','Maquina','Total Minutos','Total Horas','Num. Paros','Promedio Minutos']];
+    Object.entries(porMaquina).sort((a,b)=>b[1].minutos-a[1].minutos).forEach(([k,v])=>{
+      const [pl,ub,mq] = k.split('|');
+      filas.push([pl,ub,mq,v.minutos,(v.minutos/60).toFixed(2),v.paros,(v.minutos/v.paros).toFixed(1)]);
+    });
+    descargarCSV('tiempo-muerto-'+todayISO()+'.csv', filas);
+  }
+  else if(tipo === 'reportes'){
+    const reps = await listReportes();
+    const filas = [['Fecha','Tipo','Urgencia','Estado','Planta','UBT','Maquina','Tecnico','Descripcion','No. Parte','Respuesta','Atendido por']];
+    reps.forEach(r=>filas.push([
+      new Date(r.creado_en).toLocaleString('es-MX'), r.tipo, r.urgencia, r.estado,
+      r.planta, r.ubt_no, r.maquina||'', r.tecnico, r.descripcion, r.numero_parte||'',
+      r.respuesta||'', r.atendido_por||''
+    ]));
+    descargarCSV('reportes-supervisor-'+todayISO()+'.csv', filas);
+  }
+}
+
+/* ---------- Reportar falla / refacción crítica (Técnico) ---------- */
+function renderReportarFalla(){
+  const ubts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
+  return `
+  <div class="card">
+    <h2>📢 Reportar al Supervisor</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Usa esto para avisar de una máquina dañada, una refacción agotada o cualquier anomalía. Le llega notificación al Supervisor de Mantenimiento.</p>
+    <div class="field"><label>Tipo de reporte</label>
+      <select id="rp_tipo">
+        <option value="falla">🔧 Falla en máquina</option>
+        <option value="refaccion">📦 Refacción crítica / agotada</option>
+        <option value="anomalia">⚠️ Anomalía o condición insegura</option>
+        <option value="otro">📝 Otro</option>
+      </select>
+    </div>
+    <div class="row2">
+      <div class="field"><label>UBT</label><select id="rp_ubt">${ubts.map(u=>`<option ${u===STATE.ubtElegida?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Máquina</label><select id="rp_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Urgencia</label>
+      <select id="rp_urgencia">
+        <option value="normal">🟢 Normal — puede esperar</option>
+        <option value="alta">🟠 Alta — afecta producción pronto</option>
+        <option value="critica">🔴 Crítica — línea parada</option>
+      </select>
+    </div>
+    <div class="field"><label>Describe la situación</label><textarea id="rp_desc" style="min-height:100px;" placeholder="Ej. El sensor de la mesa está dañado y no hay repuesto en almacén."></textarea></div>
+    <div class="row2">
+      <div class="field"><label>No. de Parte (si aplica)</label>
+        <input id="rp_parte" list="lista_partes_rp" placeholder="Ej. 02P201GFS1" autocomplete="off">
+        <datalist id="lista_partes_rp"></datalist>
+      </div>
+      <div class="field"><label>📷 Foto (opcional)</label>
+        <input type="file" id="rp_foto" accept="image/*" capture="environment" onchange="previsualizarFoto(this,'prev_foto_rp')">
+      </div>
+    </div>
+    <div id="prev_foto_rp" style="margin-bottom:12px;"></div>
+    <button class="btn" onclick="enviarReporte()">📤 Enviar reporte al Supervisor</button>
+  </div>
+  <div class="card">
+    <h2>📄 Mis reportes enviados</h2>
+    <div id="mis_reportes"><div class="empty">Cargando...</div></div>
+  </div>`;
+}
+
+async function cargarMisReportes(){
+  const cont = document.getElementById('mis_reportes');
+  if(!cont) return;
+  const todos = await listReportes();
+  const mios = todos.filter(r=>r.tecnico === STATE.nombre);
+  cont.innerHTML = mios.length===0 ? '<div class="empty">No has enviado reportes todavía.</div>' :
+    mios.map(r=>tarjetaReporte(r, false)).join('');
+}
+
+const ICONO_TIPO = { falla:'🔧', refaccion:'📦', anomalia:'⚠️', otro:'📝' };
+const COLOR_URGENCIA = { normal:'#1a7a3c', alta:'#c77700', critica:'#a13636' };
+const TXT_URGENCIA = { normal:'Normal', alta:'Alta', critica:'CRÍTICA' };
+
+function tarjetaReporte(r, esSupervisor){
+  const cerrado = r.estado === 'cerrado';
+  return `
+  <div style="border:1px solid #e2e5e8;border-left:5px solid ${COLOR_URGENCIA[r.urgencia]||'#999'};border-radius:10px;padding:14px;margin-bottom:12px;${cerrado?'opacity:.65;background:#fafbfc;':''}">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+      <div style="font-weight:800;font-size:14px;">${ICONO_TIPO[r.tipo]||'📝'} ${escapeHtml(r.maquina||'')} · UBT ${escapeHtml(r.ubt_no)}</div>
+      <div>
+        <span class="badge-est" style="background:${COLOR_URGENCIA[r.urgencia]}22;color:${COLOR_URGENCIA[r.urgencia]};">${TXT_URGENCIA[r.urgencia]||''}</span>
+        <span class="badge-est ${cerrado?'act':'bloq'}">${cerrado?'✓ Atendido':'● Abierto'}</span>
+      </div>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">
+      ${escapeHtml(r.planta)} · ${escapeHtml(r.tecnico)}${r.gafete?(' ('+escapeHtml(r.gafete)+')'):''} · ${new Date(r.creado_en).toLocaleString('es-MX')}
+    </div>
+    <div style="font-size:13.5px;margin-bottom:8px;">${escapeHtml(r.descripcion)}</div>
+    ${r.numero_parte?`<div style="font-size:12.5px;margin-bottom:8px;"><b>No. de Parte:</b> ${escapeHtml(r.numero_parte)}</div>`:''}
+    ${r.foto?`<img src="${r.foto}" style="max-width:230px;border-radius:8px;border:1px solid #ddd;margin-bottom:8px;cursor:pointer;" onclick="window.open('').document.write('<img src=\\'${r.foto}\\' style=\\'max-width:100%\\'>')">`:''}
+    ${r.respuesta?`<div style="background:#e8f4ea;border-radius:8px;padding:10px;font-size:13px;margin-top:8px;"><b>Respuesta de ${escapeHtml(r.atendido_por||'Supervisor')}:</b><br>${escapeHtml(r.respuesta)}</div>`:''}
+    ${esSupervisor && !cerrado ? `
+      <div style="margin-top:10px;">
+        <textarea id="resp_${r.id}" placeholder="Escribe tu respuesta o acción tomada..." style="width:100%;min-height:60px;padding:9px;border:1px solid #d4d8dc;border-radius:8px;font-size:13px;font-family:inherit;"></textarea>
+        <button class="btn small secondary" style="margin-top:6px;" onclick="cerrarReporte('${r.id}')">✓ Marcar como atendido</button>
+      </div>` : ''}
+  </div>`;
+}
+
+async function enviarReporte(){
+  const desc = document.getElementById('rp_desc').value.trim();
+  if(!desc){ showToast('⚠️ Describe la situación'); return; }
+  const r = {
+    id: uid(),
+    tipo: document.getElementById('rp_tipo').value,
+    planta: STATE.plantaHoy,
+    ubt_no: document.getElementById('rp_ubt').value,
+    maquina: document.getElementById('rp_maquina').value,
+    tecnico: STATE.nombre,
+    gafete: STATE.usuario?.gafete || '',
+    descripcion: desc,
+    numero_parte: document.getElementById('rp_parte').value.trim(),
+    foto: fotoTemp || '',
+    urgencia: document.getElementById('rp_urgencia').value,
+    estado: 'abierto',
+    creado_en: new Date().toISOString(),
+    actualizado_en: new Date().toISOString()
+  };
+  try{ await saveReporte(r); }
+  catch(err){ showToast('⚠️ No se pudo enviar: '+(err.message||err)); return; }
+
+  if(r.numero_parte) registrarRefaccion(r.numero_parte, '');
+
+  /* Notificar a todos los supervisores */
+  const usuarios = await listUsuarios();
+  const supervisores = usuarios.filter(u=>u.rol==='supervisor' && !u.bloqueado).map(u=>slug(u.nombre));
+  const etiquetaUrg = r.urgencia==='critica' ? '🔴 CRÍTICO — ' : (r.urgencia==='alta' ? '🟠 ' : '');
+  enviarNotificacion(
+    supervisores,
+    `${etiquetaUrg}${ICONO_TIPO[r.tipo]} Reporte de ${STATE.nombre}`,
+    `${STATE.nombre} reportó ${r.tipo==='refaccion'?'una refacción crítica':'una falla'} en UBT ${r.ubt_no} (${r.maquina}) de ${r.planta}: ${desc.slice(0,90)}`
+  );
+
+  fotoTemp = null;
+  document.getElementById('rp_desc').value = '';
+  document.getElementById('rp_parte').value = '';
+  const pf = document.getElementById('prev_foto_rp'); if(pf) pf.innerHTML='';
+  const ff = document.getElementById('rp_foto'); if(ff) ff.value='';
+  showToast('📤 Reporte enviado al Supervisor ✓');
+  cargarMisReportes();
+}
+
+async function cerrarReporte(id){
+  const resp = document.getElementById('resp_'+id).value.trim();
+  const todos = await listReportes();
+  const r = todos.find(x=>x.id===id);
+  if(!r) return;
+  r.estado = 'cerrado';
+  r.respuesta = resp || 'Atendido.';
+  r.atendido_por = STATE.nombre;
+  r.actualizado_en = new Date().toISOString();
+  await saveReporte(r);
+  enviarNotificacion([slug(r.tecnico)], '✓ Tu reporte fue atendido', `${STATE.nombre} respondió a tu reporte de UBT ${r.ubt_no}: ${(resp||'Atendido.').slice(0,90)}`);
+  showToast('Reporte cerrado ✓');
+  render();
+}
+
+/* ---------- Reportes de falla al supervisor ---------- */
+async function listReportes(filtro){
+  try{
+    let q = 'reportes?select=*&order=creado_en.desc';
+    if(filtro==='abierto') q = 'reportes?estado=eq.abierto&select=*&order=creado_en.desc';
+    return await sbFetch(q) || [];
+  }catch(e){ console.warn(e); return []; }
+}
+async function saveReporte(r){
+  await sbFetch('reportes?on_conflict=id', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify(r)
+  });
+}
+
+/* ---------- Utilidades de tiempo ---------- */
+function minutosEntre(hi, hf){
+  if(!hi || !hf) return 0;
+  const [h1,m1] = hi.split(':').map(Number);
+  const [h2,m2] = hf.split(':').map(Number);
+  let min = (h2*60+m2) - (h1*60+m1);
+  if(min < 0) min += 24*60; /* cruzó medianoche */
+  return min;
+}
+function formatoDuracion(min){
+  if(!min) return '—';
+  const h = Math.floor(min/60), m = min%60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/* ---------- Compresión de fotos ---------- */
+function comprimirImagen(file, maxLado=1000, calidad=0.7){
+  return new Promise((resolve, reject)=>{
+    const lector = new FileReader();
+    lector.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let {width:w, height:h} = img;
+        if(w > h && w > maxLado){ h = h*maxLado/w; w = maxLado; }
+        else if(h > maxLado){ w = w*maxLado/h; h = maxLado; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', calidad));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    lector.onerror = reject;
+    lector.readAsDataURL(file);
+  });
 }
 
 /* ---------- Notificaciones Push ---------- */
