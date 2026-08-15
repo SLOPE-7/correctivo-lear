@@ -258,13 +258,24 @@ function todasLasUbts(plantasCfg){
   return [...new Set(union)];
 }
 
+
+/* Lee el campo ubts_por_planta soportando el formato viejo (plano) y el nuevo (con __ubts) */
+function desempacarExtra(extra){
+  const e = extra || {};
+  if(Object.prototype.hasOwnProperty.call(e, '__ubts')){
+    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado };
+  }
+  const limpio = { ...e };
+  delete limpio.__bloqueado;
+  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado };
+}
+
 async function getUsuario(nombre){
   try{
     const r = await sbFetch('usuarios?nombre_slug=eq.'+encodeURIComponent(slug(nombre))+'&select=*');
     if(!r || !r[0]) return null;
     const u = r[0];
-    const extra = u.ubts_por_planta || {};
-    return { nombre: u.nombre, rol: u.rol, gafete: u.gafete, ubtsPorPlanta: extra.__ubts || extra, bloqueado: !!extra.__bloqueado };
+    return { nombre: u.nombre, rol: u.rol, gafete: u.gafete, ...desempacarExtra(u.ubts_por_planta) };
   }catch(e){ console.warn(e); return null; }
 }
 async function saveUsuario(u){
@@ -283,7 +294,7 @@ async function deleteUsuario(nombre){
 async function listUsuarios(){
   try{
     const r = await sbFetch('usuarios?select=*&order=nombre.asc');
-    return (r||[]).map(u=>{ const e=u.ubts_por_planta||{}; return { nombre:u.nombre, rol:u.rol, gafete:u.gafete, ubtsPorPlanta:e.__ubts||e, bloqueado:!!e.__bloqueado }; });
+    return (r||[]).map(u=>({ nombre:u.nombre, rol:u.rol, gafete:u.gafete, ...desempacarExtra(u.ubts_por_planta) }));
   }catch(e){ console.warn(e); return []; }
 }
 async function getSheet(key){
@@ -553,10 +564,17 @@ function renderRolePicker(){
   </div>`;
 }
 
-function entrarGuardado(){
+async function entrarGuardado(){
   const g = JSON.parse(localStorage.getItem('correctivo_usuario_guardado') || 'null');
   if(!g) return;
-  STATE.rol = g.rol; STATE.nombre = g.nombre; STATE.usuario = null;
+  STATE.rol = g.rol; STATE.nombre = g.nombre;
+  STATE.usuario = await getUsuario(g.nombre);
+  if(!STATE.usuario){
+    /* Ya no existe en la base (lo borró el admin): lo recreamos con lo guardado */
+    STATE.usuario = { nombre:g.nombre, rol:g.rol, gafete:g.gafete||'—', ubtsPorPlanta:{}, bloqueado:false };
+    try{ await saveUsuario(STATE.usuario); }catch(e){}
+  }
+  await activarNotificaciones(true);
   render();
 }
 function olvidarUsuario(){
@@ -587,11 +605,21 @@ async function confirmarAcceso(){
   if(!esSupervisor && !gafete){ document.getElementById('gafete_login').style.borderColor='red'; showToast('⚠️ Escribe tu No. de Gafete'); return; }
   if(codigo !== STATE.codes[rolSeleccionadoTemp]){ document.getElementById('codigo_error').style.display='block'; return; }
 
-  STATE.rol = rolSeleccionadoTemp; STATE.nombre = nombre; STATE.usuario = null;
+  STATE.rol = rolSeleccionadoTemp; STATE.nombre = nombre;
 
   const existente = await getUsuario(nombre);
-  if(existente && existente.bloqueado){ render(); return; }
-  STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: (existente&&existente.ubtsPorPlanta)||{}, bloqueado:false };
+  if(existente && existente.bloqueado){ STATE.usuario = existente; render(); return; }
+
+  if(existente){
+    /* Ya estaba registrado: conservamos sus UBTs y solo actualizamos lo básico */
+    STATE.usuario = {
+      ...existente,
+      rol: STATE.rol,
+      gafete: esSupervisor ? '—' : (gafete || existente.gafete)
+    };
+  } else {
+    STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: {}, bloqueado:false };
+  }
   try{ await saveUsuario(STATE.usuario); }catch(err){ showToast('⚠️ '+(err.message||err)); return; }
 
   if(recordar){
@@ -862,13 +890,29 @@ async function firmarApqp(sheetKeyStr, filaId){
   showToast('Firmado ✓'); render();
 }
 
-/* ---------- Ver correctivos (disponible para todos los roles, solo lectura) ---------- */
+/* ---------- Ver correctivos (solo lectura) ---------- */
 let sheetsCacheVerTodo = [];
 async function renderVerCorrectivos(){
-  sheetsCacheVerTodo = await listSheets();
+  const todas = await listSheets();
+  const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
+
+  if(esAuditorTipo){
+    /* Auditor y APQP: solo las hojas de los UBT que tienen asignados (en cualquier planta) */
+    const asignados = STATE.usuario?.ubtsPorPlanta || {};
+    sheetsCacheVerTodo = todas.filter(s => (asignados[s.planta]||[]).includes(s.ubtNo));
+  } else {
+    sheetsCacheVerTodo = todas;
+  }
+
   const plantaDefault = STATE.rol!=='supervisor' ? (STATE.plantaHoy||'') : '';
   const ubtDefault = STATE.rol!=='supervisor' ? (STATE.ubtElegida||'') : '';
-  return `<div class="card"><h2>Ver correctivos — solo lectura</h2>
+
+  const misUbtsTxt = esAuditorTipo
+    ? Object.entries(asignadosResumen()).map(([pl,v])=>`${pl}: ${v.join(', ')}`).join(' · ')
+    : '';
+
+  return `<div class="card"><h2>👁️ Ver correctivos — solo lectura</h2>
+    ${esAuditorTipo ? `<p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Solo se muestran tus líneas asignadas${misUbtsTxt?(' → '+escapeHtml(misUbtsTxt)):''}.</p>` : ''}
     <div class="filters">
       <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()" autocomplete="off" autocorrect="off" spellcheck="false" name="vt_pl_x">
       <input id="vt_filtro_ubt" placeholder="Filtrar por UBT" value="${escapeHtml(ubtDefault)}" oninput="filtrarVerTodo()" autocomplete="off" autocorrect="off" spellcheck="false" name="vt_ubt_x">
@@ -877,12 +921,23 @@ async function renderVerCorrectivos(){
     <div id="vt_lista"></div>
   </div>`;
 }
+
+function asignadosResumen(){
+  const a = STATE.usuario?.ubtsPorPlanta || {};
+  const out = {};
+  Object.entries(a).forEach(([p,v])=>{ if(v && v.length) out[p]=v; });
+  return out;
+}
 function filtrarVerTodo(){
   const pEl = document.getElementById('vt_filtro_planta'), uEl = document.getElementById('vt_filtro_ubt');
   if(!pEl) return;
   const planta = pEl.value.toLowerCase(), ubt = uEl.value.toLowerCase();
   const filtradas = sheetsCacheVerTodo.filter(s => (!planta || (s.planta||'').toLowerCase().includes(planta)) && (!ubt || (s.ubtNo||'').toLowerCase().includes(ubt)));
-  document.getElementById('vt_lista').innerHTML = filtradas.length===0 ? '<div class="empty">Sin hojas.</div>' : renderAgrupadoPorPlantaUbtMaquina(filtradas, STATE.rol);
+  const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
+  const vacio = esAuditorTipo
+    ? '<div class="empty">No hay correctivos registrados en tus líneas asignadas.</div>'
+    : '<div class="empty">Sin hojas.</div>';
+  document.getElementById('vt_lista').innerHTML = filtradas.length===0 ? vacio : renderAgrupadoPorPlantaUbtMaquina(filtradas, STATE.rol);
 }
 
 /* ---------- SUPERVISOR ---------- */
