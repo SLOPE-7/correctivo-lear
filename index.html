@@ -406,7 +406,7 @@ async function render(){
 function renderTopbar(){
   const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
   const rolesConPlanta = ['tecnico','auditor','apqp'];
-  const puedeVerTodo = STATE.rol==='supervisor' || (rolesConPlanta.includes(STATE.rol) && STATE.ubtElegida);
+  const puedeVerTodo = STATE.rol==='supervisor' || esAuditorTipo || (STATE.rol==='tecnico' && STATE.ubtElegida);
   const notifOn = pushDisponible() && Notification.permission === 'granted';
   return `<div class="topbar no-print">
     <div class="tb-left">
@@ -835,14 +835,17 @@ async function renderAuditor(){
   const pendientesFilas = [];
   sheets.forEach(s => (s.filas||[]).forEach(f => { if(f.estadoAuditor==='pendiente') pendientesFilas.push({s,f}); }));
   const sheetsConPendientes = sheets.filter(s => (s.filas||[]).some(f=>f.estadoAuditor==='pendiente'));
+  const sinPendientes = sheets.filter(s => !(s.filas||[]).some(f=>f.estadoAuditor==='pendiente'));
   return `
-  <div class="card"><h2>🔔 Notificaciones (${pendientesFilas.length})</h2>
-    ${pendientesFilas.length===0 ? '<div class="empty">Sin notificaciones pendientes.</div>' :
+  <div class="card"><h2>🔔 Pendientes de tu firma (${pendientesFilas.length})</h2>
+    ${pendientesFilas.length===0 ? '<div class="empty">Sin firmas pendientes. ✓</div>' :
       pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> realizó una reparación en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha} — necesita tu firma.</div>`).join('')}
+    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'auditor'})}</div>`).join('')}
   </div>
-  <div class="card"><h2>Tus hojas asignadas en ${STATE.plantaHoy} (UBT: ${misUbts.join(', ')||'—'})</h2>
-    ${sheetsConPendientes.length===0 ? '<div class="empty">No hay hojas con pendientes.</div>' :
-      sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'auditor'})}</div>`).join('')}
+  <div class="card"><h2>📋 Todos los correctivos de tus líneas — ${STATE.plantaHoy}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">UBT asignados: ${misUbts.join(', ')||'—'}</p>
+    ${sinPendientes.length===0 ? '<div class="empty">No hay más hojas registradas en tus líneas.</div>' :
+      sinPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'auditor'})}</div>`).join('')}
   </div>`;
 }
 async function firmarAuditor(sheetKeyStr, filaId){
@@ -866,14 +869,17 @@ async function renderApqp(){
   const pendientesFilas = [];
   sheets.forEach(s => (s.filas||[]).forEach(f => { if(f.estadoAPQP==='pendiente') pendientesFilas.push({s,f}); }));
   const sheetsConPendientes = sheets.filter(s => (s.filas||[]).some(f=>f.estadoAPQP==='pendiente'));
+  const sinPendientes = sheets.filter(s => !(s.filas||[]).some(f=>f.estadoAPQP==='pendiente'));
   return `
-  <div class="card"><h2>🔔 Notificaciones (${pendientesFilas.length})</h2>
-    ${pendientesFilas.length===0 ? '<div class="empty">Sin notificaciones pendientes.</div>' :
+  <div class="card"><h2>🔔 Pendientes de tu firma (${pendientesFilas.length})</h2>
+    ${pendientesFilas.length===0 ? '<div class="empty">Sin firmas pendientes. ✓</div>' :
       pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> solicitó tu firma en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha}.</div>`).join('')}
+    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'apqp'})}</div>`).join('')}
   </div>
-  <div class="card"><h2>Tus hojas asignadas en ${STATE.plantaHoy} (UBT: ${misUbts.join(', ')||'—'})</h2>
-    ${sheetsConPendientes.length===0 ? '<div class="empty">No hay hojas con pendientes.</div>' :
-      sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'apqp'})}</div>`).join('')}
+  <div class="card"><h2>📋 Todos los correctivos de tus líneas — ${STATE.plantaHoy}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">UBT asignados: ${misUbts.join(', ')||'—'}</p>
+    ${sinPendientes.length===0 ? '<div class="empty">No hay más hojas registradas en tus líneas.</div>' :
+      sinPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'apqp'})}</div>`).join('')}
   </div>`;
 }
 async function firmarApqp(sheetKeyStr, filaId){
