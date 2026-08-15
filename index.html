@@ -262,6 +262,18 @@ async function saveConfig(cfg){
     body: JSON.stringify({ clave:'accesscodes', valor: cfg, actualizado_en: new Date().toISOString() })
   });
 }
+async function getModoPruebas(){
+  try{
+    const r = await sbFetch('config?clave=eq.modo_pruebas&select=valor');
+    return (r && r[0]) ? !!r[0].valor.activo : false;
+  }catch(e){ return false; }
+}
+async function saveModoPruebas(activo){
+  await sbFetch('config?on_conflict=clave', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave:'modo_pruebas', valor:{activo:!!activo}, actualizado_en:new Date().toISOString() })
+  });
+}
 async function getTurnosConfig(){
   try{
     const r = await sbFetch('config?clave=eq.turnos&select=valor');
@@ -415,6 +427,7 @@ async function render(){
   if(!STATE.codes) STATE.codes = await getConfig();
   if(!STATE.plantasCfg) STATE.plantasCfg = await getPlantasConfig();
   if(!STATE.turnosCfg) STATE.turnosCfg = await getTurnosConfig();
+  if(STATE.modoPruebas === undefined) STATE.modoPruebas = await getModoPruebas();
 
   /* Modo público: ver todos los correctivos de una UBT (acceso por QR) */
   if(STATE.modoVerUbt){
@@ -529,7 +542,8 @@ function renderTopbar(){
   const rolesConPlanta = ['tecnico','auditor','apqp'];
   const puedeVerTodo = STATE.rol==='supervisor' || esAuditorTipo || (STATE.rol==='tecnico' && STATE.ubtElegida);
   const notifOn = pushDisponible() && Notification.permission === 'granted';
-  return `<div class="topbar no-print">
+  const avisoPruebas = STATE.modoPruebas ? '<div style="background:#c77700;color:#fff;text-align:center;padding:5px;font-size:11.5px;font-weight:700;" class="no-print">🧪 MODO PRUEBAS — jornadas desactivadas</div>' : '';
+  return avisoPruebas + `<div class="topbar no-print">
     <div class="tb-left">
       <span class="tb-logo">🔧</span>
       <div>
@@ -1453,6 +1467,18 @@ async function renderAdmin(){
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Tiempo muerto, fallas frecuentes, refacciones y exportación a Excel.</p>
     <button class="btn secondary" onclick="abrirVista('analisis')">Abrir panel de análisis</button>
   </div>
+  <div class="card" style="${STATE.modoPruebas?'background:#fff7e6;border-color:#f0c674;':''}">
+    <h2>🧪 Modo pruebas</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Cuando está encendido, se ignoran los horarios de turno: todos reciben notificaciones a cualquier hora y no salen las alertas de fin de jornada. Úsalo solo mientras prueban el sistema.</p>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="font-weight:700;font-size:14px;">Estado actual:
+        <span style="color:${STATE.modoPruebas?'#c77700':'#1a7a3c'};">${STATE.modoPruebas?'🧪 PRUEBAS (jornadas apagadas)':'✅ PRODUCCIÓN (jornadas activas)'}</span>
+      </span>
+      <button class="btn ${STATE.modoPruebas?'secondary':'ghost'} small" onclick="alternarModoPruebas()">
+        ${STATE.modoPruebas?'▶️ Activar jornadas (producción)':'⏸️ Apagar jornadas (pruebas)'}
+      </button>
+    </div>
+  </div>
   <div class="card">
     <h2>🕐 Horarios de turnos</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Define el horario de cada turno. Se usa para asignar el turno automáticamente y para saber si alguien puede recibir notificaciones.</p>
@@ -1576,6 +1602,15 @@ function confirmarBorrarUsuario(btn, nombre){
 async function eliminarUsuario(nombre){
   await deleteUsuario(nombre);
   showToast('Usuario eliminado ✓');
+  render();
+}
+
+async function alternarModoPruebas(){
+  const nuevo = !STATE.modoPruebas;
+  try{ await saveModoPruebas(nuevo); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+  STATE.modoPruebas = nuevo;
+  showToast(nuevo ? '🧪 Jornadas apagadas — modo pruebas' : '✅ Jornadas activas — modo producción');
   render();
 }
 
@@ -1982,6 +2017,7 @@ let intervaloJornada = null;
 
 function iniciarVigilanciaJornada(){
   if(intervaloJornada) clearInterval(intervaloJornada);
+  if(STATE.modoPruebas) return;
   if(!STATE.usuario?.turno || STATE.rol==='supervisor' || STATE.rol==='admin') return;
   revisarJornada();
   intervaloJornada = setInterval(revisarJornada, 60000);
@@ -2042,6 +2078,7 @@ function cerrarBannerJornada(){
 
 /* Aviso al entrar fuera del horario normal del turno */
 function avisoEntradaAnticipada(){
+  if(STATE.modoPruebas) return '';
   if(!STATE.usuario?.turno) return '';
   const T = STATE.turnosCfg || DEFAULT_TURNOS;
   const t = T[STATE.usuario.turno];
@@ -2802,7 +2839,7 @@ async function enviarNotificacion(destinatarios, titulo, cuerpo){
         'Authorization': 'Bearer ' + SUPABASE_KEY,
         'apikey': SUPABASE_KEY
       },
-      body: JSON.stringify({ destinatarios, titulo, cuerpo })
+      body: JSON.stringify({ destinatarios, titulo, cuerpo, ignorarJornada: !!STATE.modoPruebas })
     });
   }catch(err){ console.warn('No se pudo enviar la notificación:', err); }
 }
