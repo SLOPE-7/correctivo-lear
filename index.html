@@ -60,6 +60,7 @@
   .role-card.rc-auditor{background:#ffffff;color:#1a1a1a;border-color:#ccc;}
   .role-card.rc-apqp{background:#a13636;color:#fff;}
   .role-card.rc-supervisor{background:#8a8f98;color:#fff;}
+  .role-card.rc-produccion{background:#1a7a3c;color:#fff;}
   .role-card.rc-admin{background:#1a1a1a;color:#fff;}
   .planta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-width:480px;}
   .planta-card{background:#fff;border-radius:10px;padding:14px 8px;text-align:center;cursor:pointer;border:2px solid #e2e5e8;box-shadow:0 2px 6px #00000010;font-weight:700;font-size:12.5px;transition:.15s;}
@@ -159,8 +160,33 @@ const ROLES = {
   auditor:   {label:"Auditor de Calidad", emoji:"🧾"},
   apqp:      {label:"APQP", emoji:"✅"},
   supervisor:{label:"Supervisor de Mantenimiento", emoji:"👁️"},
+  produccion:{label:"Producción", emoji:"🏭"},
   admin:     {label:"Administrador", emoji:"⚙️"},
 };
+const SUBROLES_PROD = {
+  supervisor_prod: { label:'Supervisor de Producción', emoji:'👔', multiUbt:true,  puedeLlenarTpm:false },
+  lider:           { label:'Líder de Línea',           emoji:'📋', multiUbt:true,  puedeLlenarTpm:true  },
+  multifuncional:  { label:'Multifuncional',           emoji:'🔀', multiUbt:true,  puedeLlenarTpm:false },
+  operador:        { label:'Operador',                 emoji:'🧑‍🏭', multiUbt:false, puedeLlenarTpm:true  }
+};
+
+const TPM_ACTIVIDADES = [
+  { id:'a1', sub:'Suciedad en Módulos',   texto:'Asegure que los módulos estén libres de suciedad y desperdicios. Use la pistola de aire y una brocha.' },
+  { id:'a2', sub:'Validación de Pines',   texto:'Verifique que estén completos los pines en cada módulo de la mesa. Registre si encuentra faltantes.' },
+  { id:'a3', sub:'Presión Neumática',     texto:'Verifique que la presión de operación esté entre 5 y 7 bares.' },
+  { id:'a4', sub:'Revisión de Tornillería',texto:'Revise que la tornillería de la mesa esté ajustada y completa.' },
+  { id:'a5', sub:'Limpieza de Mesa',      texto:'Realizar limpieza de mesa en general.' },
+  { id:'a6', sub:'Limpieza de Impresora', texto:'Con un trapo realizar limpieza de impresora de etiquetas.' },
+  { id:'a7', sub:'Limpieza de Monitor',   texto:'Realizar limpieza de monitor y/o Dynalab de la mesa, utilizando un trapo.' },
+  { id:'a8', sub:'Apagado de Equipo',     texto:'Asegúrate de apagar tu equipo si tu línea no trabaja el siguiente turno.' }
+];
+
+const EXTRAS_FOCO = ['Pull System','Tablero de Construcción','Socar elevadores','Revisión de fixturas','Carritos de Pull','Resorte en fingers'];
+function maquinasParaFoco(){ return [...MAQ_COR, ...EXTRAS_FOCO]; }
+
+const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+function diaHoy(){ return DIAS_SEMANA[new Date().getDay()]; }
+
 const DEFAULT_TURNOS = {
   TA: { nombre:'Turno A', inicio:'06:00', fin:'14:50',
         extras:[ {etiqueta:'14:50 a 17:00', inicio:'14:50', fin:'17:00'},
@@ -217,7 +243,7 @@ function minutosParaFinJornada(usuario){
   return dif;
 }
 
-const DEFAULT_CODES = { tecnico:"Mantto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", admin:"8102vgreal" };
+const DEFAULT_CODES = { tecnico:"Mantto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", produccion:"Ensamble", admin:"8102vgreal" };
 
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
 function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -343,11 +369,11 @@ function todasLasUbts(plantasCfg){
 function desempacarExtra(extra){
   const e = extra || {};
   if(Object.prototype.hasOwnProperty.call(e, '__ubts')){
-    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre', turno: e.__turno || '', extraInicio: e.__extraInicio || '', extraFin: e.__extraFin || '' };
+    return { ubtsPorPlanta: e.__ubts || {}, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre', turno: e.__turno || '', extraInicio: e.__extraInicio || '', extraFin: e.__extraFin || '', subrol: e.__subrol || '', maquina: e.__maquina || '' };
   }
   const limpio = { ...e };
-  delete limpio.__bloqueado; delete limpio.__firma; delete limpio.__modoFirma; delete limpio.__turno; delete limpio.__extraInicio; delete limpio.__extraFin;
-  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre', turno: e.__turno || '', extraInicio: e.__extraInicio || '', extraFin: e.__extraFin || '' };
+  delete limpio.__bloqueado; delete limpio.__firma; delete limpio.__modoFirma; delete limpio.__turno; delete limpio.__extraInicio; delete limpio.__extraFin; delete limpio.__subrol; delete limpio.__maquina;
+  return { ubtsPorPlanta: limpio, bloqueado: !!e.__bloqueado, firma: e.__firma || '', modoFirma: e.__modoFirma || 'nombre', turno: e.__turno || '', extraInicio: e.__extraInicio || '', extraFin: e.__extraFin || '', subrol: e.__subrol || '', maquina: e.__maquina || '' };
 }
 
 async function getUsuario(nombre){
@@ -364,7 +390,7 @@ async function saveUsuario(u){
     prefer: 'resolution=merge-duplicates,return=minimal',
     body: JSON.stringify({
       nombre_slug: slug(u.nombre), nombre: u.nombre, rol: u.rol,
-      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado, __firma: u.firma || '', __modoFirma: u.modoFirma || 'nombre', __turno: u.turno || '', __extraInicio: u.extraInicio || '', __extraFin: u.extraFin || '' }
+      gafete: u.gafete, ubts_por_planta: { __ubts: u.ubtsPorPlanta || {}, __bloqueado: !!u.bloqueado, __firma: u.firma || '', __modoFirma: u.modoFirma || 'nombre', __turno: u.turno || '', __extraInicio: u.extraInicio || '', __extraFin: u.extraFin || '', __subrol: u.subrol || '', __maquina: u.maquina || '' }
     })
   });
 }
@@ -455,7 +481,7 @@ async function render(){
       return;
     }
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
-    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); cargarCatalogoPartes(); }, 50);
+    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); cargarCatalogoPartes(); actualizarUbtsFocoTest(); cargarFocosAdmin(); }, 50);
     return;
   }
 
@@ -503,6 +529,18 @@ async function render(){
     setTimeout(()=>{ cargarMisReportes(); cargarListaPartesRp(); }, 50);
     return;
   }
+  if(STATE.vista === 'foco' && ['produccion'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderFoco()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'tpm_suplencia' && STATE.rol==='produccion'){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${renderTpmSuplencia()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'solicitudes' && STATE.rol==='tecnico'){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderSolicitudesTecnico()}</div>`;
+    return;
+  }
   if(STATE.vista === 'firma' && STATE.usuario){
     app.innerHTML = renderTopbar() + `<div class="wrap">${renderRegistroFirma()}</div>`;
     setTimeout(iniciarCanvasFirma, 60);
@@ -513,10 +551,21 @@ async function render(){
     return;
   }
 
-  const rolesConPlanta = ['tecnico','auditor','apqp'];
+  const rolesConPlanta = ['tecnico','auditor','apqp','produccion'];
   if(rolesConPlanta.includes(STATE.rol) && !STATE.plantaHoy){
     app.innerHTML = renderTopbar() + renderPlantaPicker();
     return;
+  }
+
+  if(STATE.rol==='produccion' && STATE.plantaHoy){
+    const sub = STATE.usuario?.subrol || 'operador';
+    const multi = SUBROLES_PROD[sub]?.multiUbt;
+    const asignadas = (STATE.usuario.ubtsPorPlanta||{})[STATE.plantaHoy] || [];
+    if(asignadas.length===0 || STATE.editandoUbts){
+      app.innerHTML = renderTopbar() + renderUbtsProdSetup(multi);
+      return;
+    }
+    if(!multi) STATE.ubtElegida = asignadas[0];
   }
 
   if(esAuditorTipo && STATE.plantaHoy){
@@ -533,11 +582,14 @@ async function render(){
     else if(STATE.rol==='auditor') body = await renderAuditor();
     else if(STATE.rol==='apqp') body = await renderApqp();
     else if(STATE.rol==='supervisor') body = await renderSupervisor();
+    else if(STATE.rol==='produccion') body = await renderProduccion();
   }catch(err){
     body = `<div class="card"><h2>⚠️ Error</h2><p style="font-size:13px;color:var(--muted);">${escapeHtml(err.message||String(err))}</p></div>`;
   }
   app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap"><div id="banner_jornada" class="no-print" style="display:none;border-radius:10px;padding:14px;margin-bottom:14px;"></div>${avisoEntradaAnticipada()}${body}</div>`;
   setTimeout(iniciarVigilanciaJornada, 100);
+  setTimeout(iniciarRecordatorios, 200);
+  if(STATE.rol==='produccion') setTimeout(cargarZonaTpm, 120);
   if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
   if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); }, 60);
 }
@@ -560,6 +612,7 @@ function renderTopbar(){
       <button class="tb-btn" onclick="irInicio()" title="Inicio">🏠<span>Inicio</span></button>
       <button class="tb-btn" onclick="actualizarDatos()" title="Actualizar">🔄<span>Actualizar</span></button>
       ${puedeVerTodo && !STATE.viendoTodo && !STATE.vista ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos">👁️<span>Correctivos</span></button>`:''}
+      ${STATE.rol==='tecnico' ? `<button class="tb-btn ${STATE.vista==='solicitudes'?'on':''}" style="background:#e0b40044;border-color:#e0b40088;" onclick="abrirVista('solicitudes')" title="Solicitudes de mantenimiento">💡<span>Focos</span></button>`:''}
       ${STATE.rol==='tecnico' ? `<button class="tb-btn ${STATE.vista==='reportar'?'on':''}" style="background:#c7770044;border-color:#c7770088;" onclick="abrirVista('reportar')" title="Reportar falla al supervisor">📢<span>Reportar</span></button>`:''}
       ${['tecnico','supervisor'].includes(STATE.rol) ? `<button class="tb-btn ${STATE.vista==='analisis'?'on':''}" onclick="abrirVista('analisis')" title="Reportes y análisis">📊<span>Análisis</span></button>`:''}
       ${STATE.rol==='supervisor' ? `<button class="tb-btn ${STATE.vista==='buzon'?'on':''}" onclick="abrirVista('buzon')" title="Reportes recibidos">📬<span>Buzón</span></button>`:''}
@@ -736,6 +789,11 @@ function renderRolePicker(){
       <h2 id="nombre_form_title">Acceso</h2>
       <div class="field"><label>Tu nombre</label><input id="nombre_input" placeholder="Escribe tu nombre" autocapitalize="words"></div>
       <div class="field" id="gafete_wrap"><label>No. de Gafete</label><input id="gafete_login" placeholder="Tu número de gafete" inputmode="numeric"></div>
+      <div class="field" id="subrol_wrap" style="display:none;"><label>¿Qué puesto tienes?</label>
+        <select id="subrol_login">
+          ${Object.entries(SUBROLES_PROD).map(([k,r])=>`<option value="${k}">${r.emoji} ${r.label}</option>`).join('')}
+        </select>
+      </div>
       <div class="field" id="turno_wrap"><label>Tu turno</label>
         <select id="turno_login">
           <option value="TA">🌅 Turno A — 06:00 a 14:50</option>
@@ -776,6 +834,7 @@ function elegirRol(rol){
   rolSeleccionadoTemp = rol;
   document.getElementById('nombre_form_title').textContent = ROLES[rol].emoji + ' Acceso — ' + ROLES[rol].label;
   document.getElementById('gafete_wrap').style.display = (rol==='supervisor') ? 'none' : 'flex';
+  document.getElementById('subrol_wrap').style.display = (rol==='produccion') ? 'flex' : 'none';
   document.getElementById('nombre_form').style.display = 'block';
   document.getElementById('nombre_form').scrollIntoView({behavior:'smooth'});
   document.getElementById('nombre_input').focus();
@@ -785,6 +844,7 @@ async function confirmarAcceso(){
   const nombre = document.getElementById('nombre_input').value.trim();
   const gafete = document.getElementById('gafete_login').value.trim();
   const turnoSel = document.getElementById('turno_login').value;
+  const subrolSel = document.getElementById('subrol_login')?.value || '';
   const codigo = document.getElementById('codigo_input').value;
   const recordar = document.getElementById('recordar_chk').checked;
   const esSupervisor = rolSeleccionadoTemp === 'supervisor';
@@ -804,10 +864,11 @@ async function confirmarAcceso(){
       ...existente,
       rol: STATE.rol,
       gafete: esSupervisor ? '—' : (gafete || existente.gafete),
-      turno: turnoSel, extraInicio:'', extraFin:''
+      turno: turnoSel, extraInicio:'', extraFin:'',
+      subrol: rolSeleccionadoTemp==='produccion' ? subrolSel : ''
     };
   } else {
-    STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: {}, bloqueado:false, turno: turnoSel, extraInicio:'', extraFin:'' };
+    STATE.usuario = { nombre, gafete: esSupervisor ? '—' : gafete, rol: STATE.rol, ubtsPorPlanta: {}, bloqueado:false, turno: turnoSel, extraInicio:'', extraFin:'', subrol: rolSeleccionadoTemp==='produccion' ? subrolSel : '' };
   }
   try{ await saveUsuario(STATE.usuario); }catch(err){ showToast('⚠️ '+(err.message||err)); return; }
 
@@ -1177,6 +1238,433 @@ async function imprimirUbtPublica(){
   colaImpresion = delUbt;
   imprimirCola();
   colaImpresion = [];
+}
+
+function renderUbtsProdSetup(multi){
+  const listaUbts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
+  const actuales = (STATE.usuario.ubtsPorPlanta||{})[STATE.plantaHoy] || [];
+  const sub = STATE.usuario?.subrol || 'operador';
+  return `<div class="wrap"><div class="card">
+    <h2>📍 ${multi?'¿Qué UBT(s) llevas':'¿En qué UBT trabajas'} en ${escapeHtml(STATE.plantaHoy)}?</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+      ${multi ? 'Como '+SUBROLES_PROD[sub].label+' puedes seleccionar varias líneas.' : 'Como Operador solo puedes seleccionar una línea.'}
+    </p>
+    <div class="ubt-check-grid">
+      ${listaUbts.map(u=>`<label><input type="${multi?'checkbox':'radio'}" name="ubtprod" class="ubt-chk" value="${u}" ${actuales.includes(u)?'checked':''}> ${u}</label>`).join('')}
+    </div>
+    <button class="btn" onclick="guardarUbtsProd(${multi})">Guardar y continuar</button>
+    ${STATE.editandoUbts?`<button class="btn ghost" style="margin-top:8px;" onclick="STATE.editandoUbts=false;render();">Cancelar</button>`:''}
+  </div></div>`;
+}
+
+async function guardarUbtsProd(multi){
+  const sel = [...document.querySelectorAll('.ubt-chk:checked')].map(c=>c.value);
+  if(sel.length===0){ showToast('⚠️ Selecciona al menos una UBT'); return; }
+  if(!multi && sel.length>1){ showToast('⚠️ Como Operador solo puedes elegir una'); return; }
+  if(!STATE.usuario.ubtsPorPlanta) STATE.usuario.ubtsPorPlanta = {};
+  STATE.usuario.ubtsPorPlanta[STATE.plantaHoy] = sel;
+  if(!multi) STATE.ubtElegida = sel[0];
+  await saveUsuario(STATE.usuario);
+  STATE.editandoUbts = false;
+  showToast('Guardado ✓');
+  render();
+}
+
+/* ================= PRODUCCIÓN: TPM y Foco de mantenimiento ================= */
+
+async function getTpmHoy(planta, ubt, maquina, turno){
+  try{
+    const q = `tpm_registros?fecha=eq.${todayISO()}&planta=eq.${encodeURIComponent(planta)}&ubt_no=eq.${encodeURIComponent(ubt)}&maquina=eq.${encodeURIComponent(maquina)}&turno=eq.${turno}&select=*`;
+    const r = await sbFetch(q);
+    return (r && r[0]) ? r[0] : null;
+  }catch(e){ console.warn(e); return null; }
+}
+async function saveTpm(reg){
+  await sbFetch('tpm_registros?on_conflict=id', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify(reg)
+  });
+}
+async function listTpmDelDia(planta, ubts){
+  try{
+    const r = await sbFetch(`tpm_registros?fecha=eq.${todayISO()}&planta=eq.${encodeURIComponent(planta)}&select=*`);
+    return (r||[]).filter(t => !ubts || ubts.includes(t.ubt_no));
+  }catch(e){ return []; }
+}
+
+async function listSolicitudes(soloPendientes){
+  try{
+    const q = soloPendientes
+      ? 'solicitudes?estado=eq.pendiente&select=*&order=creado_en.asc'
+      : 'solicitudes?select=*&order=creado_en.desc';
+    return await sbFetch(q) || [];
+  }catch(e){ return []; }
+}
+async function saveSolicitud(sol){
+  await sbFetch('solicitudes?on_conflict=id', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify(sol)
+  });
+}
+
+/* ---------- Pantalla principal de Producción ---------- */
+async function renderProduccion(){
+  const sub = STATE.usuario?.subrol || 'operador';
+  const info = SUBROLES_PROD[sub];
+  const esOperador = sub === 'operador';
+
+  if(esOperador && !STATE.usuario?.maquina){
+    return `<div class="card">
+      <h2>⚙️ ¿En qué máquina trabajas?</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Selecciona tu máquina en la UBT ${escapeHtml(STATE.ubtElegida||'')}. Solo se pide una vez.</p>
+      <div class="field"><select id="prod_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
+      <button class="btn" onclick="guardarMaquinaOperador()">Guardar y continuar</button>
+    </div>`;
+  }
+
+  const pendientes = await listSolicitudes(true);
+  const misPend = pendientes.filter(x=>x.planta===STATE.plantaHoy);
+
+  return `
+  <div class="card" style="background:linear-gradient(135deg,#1a7a3c,#146030);color:#fff;">
+    <h2 style="color:#fff;">${info.emoji} ${info.label}</h2>
+    <div style="font-size:13px;opacity:.9;">
+      ${escapeHtml(STATE.plantaHoy)} · ${esOperador?('UBT '+escapeHtml(STATE.ubtElegida)+' · '+escapeHtml(STATE.usuario.maquina)):(misUbtsProd().join(', ')||'sin UBT')} · Turno ${STATE.usuario?.turno||''}
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📋 TPM diario — ${diaHoy()}</h2>
+    <div id="tpm_zona"><div class="empty">Cargando...</div></div>
+  </div>
+
+  <div class="card" style="text-align:center;">
+    <h2 style="justify-content:center;">💡 Foco de Mantenimiento</h2>
+    <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Solicita ayuda de un técnico para tu línea.</p>
+    <button onclick="abrirVista('foco')" style="background:${misPend.length?'#e0b400':'#f0f2f4'};border:3px solid ${misPend.length?'#c77700':'#d4d8dc'};border-radius:50%;width:120px;height:120px;font-size:52px;cursor:pointer;transition:.2s;box-shadow:${misPend.length?'0 0 26px #e0b40088':'none'};">💡</button>
+    <div style="margin-top:12px;font-size:13.5px;font-weight:700;color:${misPend.length?'#c77700':'var(--muted)'};">
+      ${misPend.length ? `${misPend.length} solicitud(es) activa(s) en tu planta` : 'Toca el foco para solicitar mantenimiento'}
+    </div>
+  </div>`;
+}
+
+function misUbtsProd(){
+  const a = STATE.usuario?.ubtsPorPlanta || {};
+  return a[STATE.plantaHoy] || [];
+}
+
+async function guardarMaquinaOperador(){
+  STATE.usuario.maquina = document.getElementById('prod_maquina').value;
+  await saveUsuario(STATE.usuario);
+  showToast('Máquina guardada ✓');
+  render();
+}
+
+/* ---------- TPM ---------- */
+async function cargarZonaTpm(){
+  const zona = document.getElementById('tpm_zona');
+  if(!zona) return;
+  const sub = STATE.usuario?.subrol || 'operador';
+  const puedeLlenar = SUBROLES_PROD[sub]?.puedeLlenarTpm;
+
+  if(sub === 'operador'){
+    const reg = await getTpmHoy(STATE.plantaHoy, STATE.ubtElegida, STATE.usuario.maquina, STATE.usuario.turno);
+    zona.innerHTML = renderFormularioTpm(reg, STATE.ubtElegida, STATE.usuario.maquina, true);
+    return;
+  }
+
+  /* Supervisor, Líder y Multifuncional: ven el estado de todas sus UBT */
+  const ubts = misUbtsProd();
+  const regs = await listTpmDelDia(STATE.plantaHoy, ubts);
+  const porUbt = {};
+  regs.forEach(r => (porUbt[r.ubt_no] ??= []).push(r));
+
+  zona.innerHTML = `
+    <p style="font-size:12.5px;color:var(--muted);">Estado del TPM de hoy en tus líneas${puedeLlenar?' — como Líder puedes llenarlo en caso de ausencia.':' (solo lectura).'}</p>
+    ${ubts.length===0 ? '<div class="empty">No tienes UBT asignadas.</div>' :
+      ubts.map(ub=>{
+        const lista = porUbt[ub]||[];
+        return `<details style="margin-bottom:8px;">
+          <summary style="cursor:pointer;padding:8px 10px;background:#eef1f4;border-radius:7px;font-weight:600;font-size:13px;">
+            📍 UBT ${escapeHtml(ub)} — ${lista.filter(x=>x.completo).length}/${lista.length} completado(s)
+          </summary>
+          <div style="padding:10px 0 0 12px;">
+            ${lista.length===0 ? '<div class="empty">Sin TPM registrado hoy en esta línea.</div>' :
+              lista.map(r=>`<div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #eef0f2;font-size:13px;flex-wrap:wrap;gap:6px;">
+                <span>⚙️ ${escapeHtml(r.maquina)} <span style="color:var(--muted);font-size:11.5px;">(${escapeHtml(r.operador)})</span></span>
+                <span>${r.completo?'<span class="badge-est act">✓ Completo</span>':'<span class="badge-est bloq">● Incompleto</span>'}</span>
+              </div>`).join('')}
+            ${puedeLlenar?`<button class="btn small secondary" style="margin-top:10px;" onclick="abrirTpmSuplencia('${ub.replace(/'/g,"\\\\'")}')">✍️ Llenar TPM por ausencia</button>`:''}
+          </div>
+        </details>`;
+      }).join('')}`;
+}
+
+function renderFormularioTpm(reg, ubt, maquina, esPropio){
+  const dia = diaHoy();
+  const marcas = (reg && reg.actividades) ? reg.actividades : {};
+  const yaCompleto = reg && reg.completo;
+
+  if(yaCompleto){
+    return `<div style="background:#e8f4ea;border-radius:10px;padding:16px;text-align:center;">
+      <div style="font-size:34px;">✅</div>
+      <div style="font-weight:800;font-size:15px;margin-top:6px;">TPM de hoy completado</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:4px;">
+        ${escapeHtml(maquina)} · ${dia} · Llenado por ${escapeHtml(reg.llenado_por||reg.operador)}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px;">Solo se puede llenar una vez al día.</div>
+    </div>`;
+  }
+
+  return `
+    <div style="background:#fff7e6;border-left:4px solid #e0b400;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12.5px;">
+      Marca cada actividad conforme la completes. Solo se puede marcar el día de hoy (<b>${dia}</b>).
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">⚙️ ${escapeHtml(maquina)} · UBT ${escapeHtml(ubt)}</div>
+    ${TPM_ACTIVIDADES.map(a=>`
+      <label style="display:flex;gap:10px;align-items:flex-start;padding:11px;border:1px solid #e2e5e8;border-radius:9px;margin-bottom:8px;cursor:pointer;background:${marcas[a.id]?'#e8f4ea':'#fff'};">
+        <input type="checkbox" class="tpm-chk" data-act="${a.id}" ${marcas[a.id]?'checked':''} onchange="this.closest('label').style.background=this.checked?'#e8f4ea':'#fff';actualizarProgresoTpm();" style="margin-top:2px;width:20px;height:20px;">
+        <span>
+          <b style="font-size:13.5px;">${a.sub}</b>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${a.texto}</div>
+        </span>
+      </label>`).join('')}
+    <div id="tpm_progreso" style="font-size:13px;font-weight:700;margin:12px 0;text-align:center;"></div>
+    <button class="btn" onclick="guardarTpm('${ubt.replace(/'/g,"\\'")}','${maquina.replace(/'/g,"\\'")}')">✓ Finalizar TPM y notificar al Auditor</button>`;
+}
+
+function actualizarProgresoTpm(){
+  const chks = [...document.querySelectorAll('.tpm-chk')];
+  const hechas = chks.filter(c=>c.checked).length;
+  const el = document.getElementById('tpm_progreso');
+  if(el) el.innerHTML = `${hechas} de ${chks.length} actividades completadas` +
+    (hechas===chks.length ? ' <span style="color:#1a7a3c;">✓ Listo para finalizar</span>' : '');
+}
+
+async function guardarTpm(ubt, maquina, operadorNombre){
+  const chks = [...document.querySelectorAll('.tpm-chk')];
+  const actividades = {};
+  chks.forEach(c=>{ actividades[c.dataset.act] = c.checked; });
+  const todas = chks.every(c=>c.checked);
+  if(!todas && !confirm('No marcaste todas las actividades. ¿Guardar de todos modos como incompleto?')) return;
+
+  const esSuplencia = !!operadorNombre;
+  const reg = {
+    id: uid(),
+    fecha: todayISO(),
+    planta: STATE.plantaHoy,
+    ubt_no: ubt,
+    maquina: maquina,
+    turno: STATE.usuario.turno,
+    operador: esSuplencia ? operadorNombre : STATE.nombre,
+    gafete: STATE.usuario?.gafete || '',
+    llenado_por: STATE.nombre,
+    rol_llenado: STATE.usuario?.subrol || '',
+    actividades,
+    completo: todas,
+    creado_en: new Date().toISOString()
+  };
+  try{ await saveTpm(reg); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+
+  /* Notificar al auditor de la misma línea y turno */
+  const usuarios = await listUsuarios();
+  const auditores = usuarios.filter(u =>
+    u.rol==='auditor' && !u.bloqueado &&
+    ((u.ubtsPorPlanta||{})[STATE.plantaHoy]||[]).includes(ubt) &&
+    (!u.turno || u.turno === STATE.usuario.turno)
+  ).map(u=>slug(u.nombre));
+
+  enviarNotificacion(
+    auditores,
+    '📋 TPM diario realizado',
+    `El Operador ${reg.operador} de la UBT ${ubt} realizó el TPM diario en la máquina ${maquina}.${esSuplencia?` (Llenado por ${STATE.nombre} por ausencia)`:''}`
+  );
+
+  showToast('✓ TPM registrado y auditor notificado');
+  render();
+}
+
+let tpmSuplenciaUbt = null;
+function abrirTpmSuplencia(ubt){
+  tpmSuplenciaUbt = ubt;
+  STATE.vista = 'tpm_suplencia';
+  render();
+}
+
+function renderTpmSuplencia(){
+  return `
+  <div class="card"><button class="btn ghost small" onclick="STATE.vista=null;render();">← Volver</button></div>
+  <div class="card">
+    <h2>✍️ Llenar TPM por ausencia — UBT ${escapeHtml(tpmSuplenciaUbt)}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Quedará registrado que tú lo llenaste en lugar del operador.</p>
+    <div class="row2">
+      <div class="field"><label>Máquina</label><select id="sup_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Nombre del operador ausente</label><input id="sup_operador" placeholder="Nombre del operador"></div>
+    </div>
+    <div id="sup_form"></div>
+    <button class="btn secondary" onclick="prepararTpmSuplencia()">Continuar al checklist</button>
+  </div>`;
+}
+
+function prepararTpmSuplencia(){
+  const maq = document.getElementById('sup_maquina').value;
+  const op = document.getElementById('sup_operador').value.trim();
+  if(!op){ showToast('⚠️ Escribe el nombre del operador ausente'); return; }
+  const cont = document.getElementById('sup_form');
+  cont.innerHTML = `<div style="margin-top:14px;">${renderFormularioTpm(null, tpmSuplenciaUbt, maq, false)}</div>`;
+  cont.querySelector('button.btn').setAttribute('onclick', `guardarTpm('${tpmSuplenciaUbt.replace(/'/g,"\\'")}','${maq.replace(/'/g,"\\'")}','${op.replace(/'/g,"\\'")}')`);
+  actualizarProgresoTpm();
+}
+
+/* ---------- Foco de mantenimiento ---------- */
+async function renderFoco(){
+  const pendientes = (await listSolicitudes(true)).filter(x=>x.planta===STATE.plantaHoy);
+  const mias = pendientes.filter(x=>x.solicitante===STATE.nombre);
+  const ubtsDisp = (STATE.usuario?.subrol==='operador') ? [STATE.ubtElegida] : misUbtsProd();
+
+  return `
+  <div class="card"><button class="btn ghost small" onclick="abrirVista('foco')">← Volver</button></div>
+  <div class="card">
+    <h2>💡 Solicitar Mantenimiento</h2>
+    <div class="row2">
+      <div class="field"><label>UBT</label><select id="fo_ubt">${ubtsDisp.map(u=>`<option>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Máquina o elemento</label><select id="fo_maquina">${maquinasParaFoco().map(m=>`<option>${m}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Nota (opcional)</label><textarea id="fo_nota" placeholder="Describe brevemente qué ocurre..."></textarea></div>
+    <button class="btn" style="background:#e0b400;color:#1a1a1a;" onclick="encenderFoco()">💡 Encender foco y solicitar mantenimiento</button>
+  </div>
+  <div class="card">
+    <h2>🔆 Solicitudes activas en ${escapeHtml(STATE.plantaHoy)} (${pendientes.length})</h2>
+    ${pendientes.length===0 ? '<div class="empty">Sin solicitudes activas.</div>' :
+      pendientes.map(s=>tarjetaSolicitud(s,false)).join('')}
+  </div>`;
+}
+
+function minutosDesde(iso){
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime())/60000));
+}
+
+function tarjetaSolicitud(s, esTecnico){
+  const min = minutosDesde(s.creado_en);
+  const atendida = s.estado === 'atendida';
+  return `
+  <div style="border:1px solid ${atendida?'#cfe3d4':'#f0c674'};background:${atendida?'#f4faf5':'#fffdf5'};border-left:5px solid ${atendida?'#1a7a3c':'#e0b400'};border-radius:10px;padding:14px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <b style="font-size:14px;">${atendida?'✅':'💡'} UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b>
+      <span class="badge-est ${atendida?'act':'bloq'}">${atendida?('Atendida por '+escapeHtml(s.atendido_por||'')):('Hace '+min+' min')}</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+      Solicitó: <b>${escapeHtml(s.solicitante)}</b>${s.rol_solicitante?(' ('+escapeHtml(SUBROLES_PROD[s.rol_solicitante]?.label||s.rol_solicitante)+')'):''} · ${escapeHtml(s.planta)} · Turno ${escapeHtml(s.turno||'')}
+    </div>
+    ${s.nota?`<div style="font-size:13px;margin-top:8px;">${escapeHtml(s.nota)}</div>`:''}
+    ${esTecnico && !atendida ? `<button class="btn small" style="margin-top:10px;background:#e0b400;color:#1a1a1a;" onclick="atenderFoco('${s.id}')">💡 Atender esta solicitud</button>` : ''}
+  </div>`;
+}
+
+async function encenderFoco(){
+  const ubt = document.getElementById('fo_ubt').value;
+  const maquina = document.getElementById('fo_maquina').value;
+  const nota = document.getElementById('fo_nota').value.trim();
+
+  const sol = {
+    id: uid(),
+    planta: STATE.plantaHoy,
+    ubt_no: ubt,
+    maquina,
+    solicitante: STATE.nombre,
+    rol_solicitante: STATE.usuario?.subrol || '',
+    gafete: STATE.usuario?.gafete || '',
+    turno: STATE.usuario?.turno || '',
+    nota,
+    estado: 'pendiente',
+    creado_en: new Date().toISOString(),
+    ultimo_recordatorio: new Date().toISOString()
+  };
+  try{ await saveSolicitud(sol); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+
+  const usuarios = await listUsuarios();
+  const tecnicos = usuarios.filter(u=>u.rol==='tecnico' && !u.bloqueado).map(u=>slug(u.nombre));
+  enviarNotificacion(
+    tecnicos,
+    '💡 Solicitud de mantenimiento',
+    `Se solicitó mantenimiento en la UBT ${ubt} en la máquina ${maquina}, por ${STATE.nombre}.`
+  );
+
+  showToast('💡 Foco encendido — técnicos notificados');
+  render();
+}
+
+async function atenderFoco(id){
+  const todas = await listSolicitudes(false);
+  const s = todas.find(x=>x.id===id);
+  if(!s) return;
+  if(s.estado === 'atendida'){ showToast('Esta solicitud ya fue atendida'); render(); return; }
+
+  s.estado = 'atendida';
+  s.atendido_por = STATE.nombre;
+  s.atendido_en = new Date().toISOString();
+  await saveSolicitud(s);
+
+  /* Avisar a quien solicitó */
+  enviarNotificacion([slug(s.solicitante)], '💡 Solicitud atendida',
+    `El Técnico ${STATE.nombre} atenderá tu petición en la UBT ${s.ubt_no} (${s.maquina}).`);
+
+  /* Avisar a los demás técnicos */
+  const usuarios = await listUsuarios();
+  const otros = usuarios.filter(u=>u.rol==='tecnico' && !u.bloqueado && slug(u.nombre)!==slug(STATE.nombre)).map(u=>slug(u.nombre));
+  enviarNotificacion(otros, '💡 Solicitud tomada',
+    `Tu compañero ${STATE.nombre} atenderá la solicitud de la UBT ${s.ubt_no}.`);
+
+  showToast('✓ Solicitud tomada');
+  render();
+}
+
+/* ---------- Recordatorios automáticos ---------- */
+let intervaloRecordatorios = null;
+
+function iniciarRecordatorios(){
+  if(intervaloRecordatorios) clearInterval(intervaloRecordatorios);
+  if(!['tecnico','supervisor','produccion'].includes(STATE.rol)) return;
+  revisarRecordatorios();
+  intervaloRecordatorios = setInterval(revisarRecordatorios, 60000);
+}
+
+async function revisarRecordatorios(){
+  try{
+    const pendientes = await listSolicitudes(true);
+    const ahora = Date.now();
+    for(const s of pendientes){
+      const ultimo = new Date(s.ultimo_recordatorio || s.creado_en).getTime();
+      if(ahora - ultimo >= 5*60*1000){
+        const min = minutosDesde(s.creado_en);
+        const usuarios = await listUsuarios();
+        const tecnicos = usuarios.filter(u=>u.rol==='tecnico' && !u.bloqueado).map(u=>slug(u.nombre));
+        enviarNotificacion(tecnicos, '💡 Solicitud SIN ATENDER',
+          `Se solicitó mantenimiento en la UBT ${s.ubt_no} en la máquina ${s.maquina}, por ${s.solicitante}. Se solicitó hace ${min} minutos.`);
+        s.ultimo_recordatorio = new Date().toISOString();
+        await saveSolicitud(s);
+      }
+    }
+  }catch(e){ console.warn(e); }
+}
+
+/* ---------- Bloque del técnico: solicitudes de mantenimiento ---------- */
+async function renderSolicitudesTecnico(){
+  const pendientes = (await listSolicitudes(true));
+  const recientes = (await listSolicitudes(false)).filter(x=>x.estado==='atendida').slice(0,10);
+  return `
+  <div class="card"><button class="btn ghost small" onclick="abrirVista('solicitudes')">← Volver</button></div>
+  <div class="card" style="${pendientes.length?'background:#fffdf5;border-color:#f0c674;':''}">
+    <h2>💡 Solicitudes de mantenimiento (${pendientes.length})</h2>
+    ${pendientes.length===0 ? '<div class="empty">No hay solicitudes pendientes. ✓</div>' :
+      pendientes.map(s=>tarjetaSolicitud(s,true)).join('')}
+  </div>
+  <div class="card">
+    <h2>✅ Atendidas recientemente</h2>
+    ${recientes.length===0 ? '<div class="empty">Sin registros.</div>' : recientes.map(s=>tarjetaSolicitud(s,false)).join('')}
+  </div>`;
 }
 
 /* ---------- Ver correctivos (solo lectura) ---------- */
@@ -1639,6 +2127,71 @@ async function eliminarUsuario(nombre){
   await deleteUsuario(nombre);
   showToast('Usuario eliminado ✓');
   render();
+}
+
+function actualizarUbtsFocoTest(){
+  const planta = document.getElementById('tf_planta').value;
+  const sel = document.getElementById('tf_ubt');
+  if(sel) sel.innerHTML = ubtsDeLaPlanta(STATE.plantasCfg, planta).map(u=>`<option>${u}</option>`).join('');
+}
+
+async function encenderFocoPrueba(){
+  const sol = {
+    id: uid(),
+    planta: document.getElementById('tf_planta').value,
+    ubt_no: document.getElementById('tf_ubt').value,
+    maquina: document.getElementById('tf_maquina').value,
+    solicitante: document.getElementById('tf_nombre').value.trim() || 'Prueba Admin',
+    rol_solicitante: 'operador',
+    gafete: '000000',
+    turno: 'TA',
+    nota: '(Solicitud de prueba generada desde Administrador)',
+    estado: 'pendiente',
+    creado_en: new Date().toISOString(),
+    ultimo_recordatorio: new Date().toISOString()
+  };
+  try{ await saveSolicitud(sol); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+
+  const usuarios = await listUsuarios();
+  const tecnicos = usuarios.filter(u=>u.rol==='tecnico' && !u.bloqueado).map(u=>slug(u.nombre));
+  enviarNotificacion(tecnicos, '💡 Solicitud de mantenimiento (PRUEBA)',
+    `Se solicitó mantenimiento en la UBT ${sol.ubt_no} en la máquina ${sol.maquina}, por ${sol.solicitante}.`);
+
+  showToast(`💡 Foco de prueba encendido — ${tecnicos.length} técnico(s) notificados`);
+  cargarFocosAdmin();
+}
+
+async function cargarFocosAdmin(){
+  const cont = document.getElementById('tf_lista');
+  if(!cont) return;
+  const todas = await listSolicitudes(false);
+  const pend = todas.filter(s=>s.estado==='pendiente');
+  cont.innerHTML = pend.length===0
+    ? '<div class="empty">Sin solicitudes activas.</div>'
+    : pend.map(s=>`<div style="border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:8px;font-size:12.5px;">
+        <b>💡 UBT ${escapeHtml(s.ubt_no)} · ${escapeHtml(s.maquina)}</b> — ${escapeHtml(s.planta)}<br>
+        <span style="color:var(--muted);">Por ${escapeHtml(s.solicitante)} · hace ${minutosDesde(s.creado_en)} min</span>
+        <button class="btn ghost small" style="margin-left:8px;color:#a13636;" onclick="borrarSolicitud('${s.id}')">✖ Borrar</button>
+      </div>`).join('');
+}
+
+async function borrarSolicitud(id){
+  await sbFetch('solicitudes?id=eq.'+encodeURIComponent(id), { method:'DELETE', prefer:'return=minimal' });
+  showToast('Solicitud borrada');
+  cargarFocosAdmin();
+}
+
+async function limpiarFocosPrueba(btn){
+  if(btn.dataset.confirm !== '1'){
+    btn.dataset.confirm='1'; btn.textContent='⚠️ Toca de nuevo para borrar TODAS';
+    setTimeout(()=>{ btn.dataset.confirm=''; btn.textContent='🗑️ Borrar TODAS las solicitudes'; }, 4000);
+    return;
+  }
+  await sbFetch('solicitudes?id=not.is.null', { method:'DELETE', prefer:'return=minimal' });
+  btn.dataset.confirm=''; btn.textContent='🗑️ Borrar TODAS las solicitudes';
+  showToast('Solicitudes borradas ✓');
+  cargarFocosAdmin();
 }
 
 async function cargarCatalogoPartes(){
