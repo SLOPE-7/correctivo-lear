@@ -368,7 +368,7 @@ async function render(){
   if(STATE.rol==='admin'){
     if(!STATE.adminOk){ app.innerHTML = renderTopbar() + renderAdminLogin(); return; }
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
-    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); }, 50);
+    setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); }, 50);
     return;
   }
 
@@ -1246,7 +1246,7 @@ async function renderAdmin(){
     <h2>UBTs por planta</h2>
     <p style="font-size:12.5px;color:var(--muted);">Cada fila es un UBT. Usa ↑ ↓ para moverlo si necesitas insertarlo entre otros dos.</p>
     ${PLANTA_NOMBRES.map(p=>`
-      <details class="planta-block" open>
+      <details class="planta-block">
         <summary style="cursor:pointer;font-weight:700;font-size:13.5px;">${p}${p==='Partes de Servicio'?' (además de estos, ya incluye automático todas las de Planta 1/2/3)':''}</summary>
         <div id="plantalist_${slug(p)}" style="margin-top:10px;">${renderPlantaListEditor(p)}</div>
         <button class="btn ghost small" style="margin-top:8px;" onclick="agregarUbtPlanta('${p.replace(/'/g,"\\'")}')">+ Agregar UBT</button>
@@ -1255,35 +1255,67 @@ async function renderAdmin(){
   </div>
   <div class="card">
     <h2>👥 Usuarios registrados (${usuarios.length})</h2>
-    ${usuarios.length===0 ? '<div class="empty">Nadie se ha registrado todavía.</div>' : `
-    <div style="overflow-x:auto;">
-    <table class="admin-tbl"><thead><tr><th>Estado</th><th>Nombre</th><th>Rol</th><th>Gafete</th><th>UBTs asignados</th><th>Acciones</th></tr></thead>
-    <tbody>${usuarios.map(u=>{
-      const ubtsTxt = u.ubtsPorPlanta ? Object.entries(u.ubtsPorPlanta).filter(([,v])=>v&&v.length).map(([p,v])=>`${p}: ${v.join(', ')}`).join(' · ') : '';
-      const uid = slug(u.nombre);
-      const bloqueado = !!u.bloqueado;
-      return `<tr style="${bloqueado?'opacity:.55;background:#fff4f4;':''}">
-        <td>${bloqueado?'<span class="badge-est bloq">🚫 Bloqueado</span>':'<span class="badge-est act">✓ Activo</span>'}</td>
-        <td><input id="au_nombre_${uid}" value="${escapeHtml(u.nombre)}" style="width:120px;padding:5px;font-size:12px;" disabled></td>
-        <td><select id="au_rol_${uid}" style="font-size:12px;padding:5px;" disabled>${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`<option value="${k}" ${u.rol===k?'selected':''}>${r.label}</option>`).join('')}</select></td>
-        <td><input id="au_gafete_${uid}" value="${escapeHtml(u.gafete)}" style="width:90px;padding:5px;font-size:12px;" disabled></td>
-        <td style="font-size:11.5px;">${ubtsTxt||'—'}</td>
-        <td style="white-space:nowrap;">
-          <button class="btn ghost small" id="au_editbtn_${uid}" onclick="toggleEditUsuario('${uid}','${u.nombre.replace(/'/g,"\\'")}')">✏️</button>
-          <button class="btn ghost small" onclick="toggleBloqueoUsuario('${u.nombre.replace(/'/g,"\\'")}',${bloqueado})">${bloqueado?'🔓':'🔒'}</button>
-          <button class="btn ghost small" style="color:#a13636;" onclick="confirmarBorrarUsuario(this,'${u.nombre.replace(/'/g,"\\'")}')">🗑</button>
-        </td>
-      </tr>`;
-    }).join('')}</tbody>
-    </table></div>`}
+    ${usuarios.length===0 ? '<div class="empty">Nadie se ha registrado todavía.</div>' :
+      Object.entries(ROLES).filter(([k])=>k!=='admin').map(([rolKey, rolInfo])=>{
+        const delRol = usuarios.filter(u=>u.rol===rolKey);
+        if(delRol.length===0) return '';
+        return `
+        <details open style="margin-bottom:12px;">
+          <summary style="cursor:pointer;font-weight:700;font-size:13.5px;padding:8px 10px;background:#eef1f4;border-radius:8px;">
+            ${rolInfo.emoji} ${rolInfo.label} (${delRol.length})
+          </summary>
+          <div style="overflow-x:auto;margin-top:8px;">
+          <table class="admin-tbl"><thead><tr><th>Estado</th><th>Nombre</th><th>Gafete</th><th>UBTs asignados</th><th>Acciones</th></tr></thead>
+          <tbody>${delRol.map(u=>{
+            const ubtsTxt = u.ubtsPorPlanta ? Object.entries(u.ubtsPorPlanta).filter(([,v])=>v&&v.length).map(([p,v])=>`${p}: ${v.join(', ')}`).join(' · ') : '';
+            const uid = slug(u.nombre);
+            const bloqueado = !!u.bloqueado;
+            return `<tr style="${bloqueado?'opacity:.55;background:#fff4f4;':''}">
+              <td>${bloqueado?'<span class="badge-est bloq">🚫 Bloqueado</span>':'<span class="badge-est act">✓ Activo</span>'}</td>
+              <td><input id="au_nombre_${uid}" value="${escapeHtml(u.nombre)}" style="width:120px;padding:5px;font-size:12px;" disabled></td>
+              <td><input id="au_gafete_${uid}" value="${escapeHtml(u.gafete)}" style="width:90px;padding:5px;font-size:12px;" disabled></td>
+              <td style="font-size:11.5px;">${ubtsTxt||'—'}</td>
+              <td style="white-space:nowrap;">
+                <select id="au_rol_${uid}" style="font-size:11px;padding:4px;display:none;">${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`<option value="${k}" ${u.rol===k?'selected':''}>${r.label}</option>`).join('')}</select>
+                <button class="btn ghost small" id="au_editbtn_${uid}" onclick="toggleEditUsuario('${uid}','${u.nombre.replace(/'/g,"\\'")}')" title="Editar">✏️</button>
+                <button class="btn ghost small" onclick="toggleBloqueoUsuario('${u.nombre.replace(/'/g,"\\'")}',${bloqueado})" title="${bloqueado?'Desbloquear':'Bloquear'}">${bloqueado?'🔓':'🔒'}</button>
+                <button class="btn ghost small" style="color:#a13636;" onclick="confirmarBorrarUsuario(this,'${u.nombre.replace(/'/g,"\\'")}')" title="Borrar">🗑</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+          </table></div>
+        </details>`;
+      }).join('')}
   </div>
   <div class="card">
     <h2>🗄️ Historial de correctivos</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Útil para limpiar los datos de prueba antes de arrancar en producción.</p>
     <div id="hist_info" style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;">Cargando...</div>
     <button class="btn secondary" onclick="descargarRespaldo()">⬇️ Descargar respaldo (JSON)</button>
+    <input type="file" id="archivo_respaldo" accept=".json" style="display:none;" onchange="importarRespaldo(this)">
+    <button class="btn ghost" style="margin-top:8px;" onclick="document.getElementById('archivo_respaldo').click()">⬆️ Importar respaldo (JSON)</button>
     <button class="btn ghost" style="margin-top:8px;" onclick="borrarHistorial(this)">🗑️ Borrar TODO el historial de hojas</button>
     <p style="font-size:11.5px;color:var(--muted);margin-top:8px;">El borrado no toca usuarios ni configuración, solo las hojas de correctivo. Descarga el respaldo antes por si acaso.</p>
+  </div>
+  <div class="card">
+    <h2>🎯 Borrado selectivo de correctivos</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Borra solo lo que elijas: una planta completa, una línea (UBT) o una sola máquina.</p>
+    <div class="field">
+      <label>¿Qué quieres borrar?</label>
+      <select id="bs_alcance" onchange="cambiarAlcanceBorrado()">
+        <option value="planta">🏭 Toda una PLANTA</option>
+        <option value="ubt">📍 Una LÍNEA (UBT) completa</option>
+        <option value="maquina">⚙️ Una sola MÁQUINA de una línea</option>
+      </select>
+    </div>
+    <div class="field"><label>Planta</label>
+      <select id="bs_planta" onchange="actualizarUbtsBorrado()">${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}</select>
+    </div>
+    <div class="field" id="bs_wrap_ubt" style="display:none;"><label>UBT (línea)</label><select id="bs_ubt"></select></div>
+    <div class="field" id="bs_wrap_maquina" style="display:none;"><label>Máquina</label>
+      <select id="bs_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select>
+    </div>
+    <button class="btn ghost" id="bs_btn" onclick="borrarSeleccionCorrectivos()">🗑️ Borrar la selección</button>
   </div>
   <div class="card">
     <h2>📱 Códigos QR de acceso</h2>
@@ -1339,6 +1371,7 @@ async function toggleEditUsuario(uid, nombre){
   const editing = btn.textContent.includes('Guardar');
   if(!editing){
     nombreEl.disabled = false; rolEl.disabled = false; gafeteEl.disabled = false;
+    rolEl.style.display = 'inline-block';
     btn.textContent = '💾 Guardar';
   } else {
     const nuevoNombre = nombreEl.value.trim();
@@ -1576,6 +1609,92 @@ async function cargarInfoHistorial(){
     const plantas = [...new Set(hojas.map(h=>h.planta))];
     el.innerHTML = `<b>${hojas.length}</b> hoja(s) · <b>${totalFilas}</b> registro(s) · Plantas: ${plantas.join(', ')||'—'}`;
   }catch(e){ el.textContent = 'No se pudo leer el historial.'; }
+}
+
+async function importarRespaldo(input){
+  const archivo = input.files && input.files[0];
+  if(!archivo) return;
+  if(!confirm('¿Importar este respaldo?\n\nLas hojas y usuarios del archivo se agregarán o sobrescribirán los actuales con la misma clave.')){
+    input.value=''; return;
+  }
+  showToast('Leyendo respaldo...');
+  try{
+    const texto = await archivo.text();
+    const data = JSON.parse(texto);
+    let hojasOk=0, usuariosOk=0;
+
+    for(const h of (data.hojas||[])){
+      try{ await saveSheet(h.key, h); hojasOk++; }catch(e){ console.warn(e); }
+    }
+    for(const u of (data.usuarios||[])){
+      try{ await saveUsuario(u); usuariosOk++; }catch(e){ console.warn(e); }
+    }
+    if(data.plantas){
+      try{ await savePlantasConfig(data.plantas); STATE.plantasCfg = data.plantas; }catch(e){}
+    }
+    showToast(`✓ Importado: ${hojasOk} hoja(s), ${usuariosOk} usuario(s)`);
+    render();
+  }catch(err){
+    showToast('⚠️ Archivo inválido: ' + (err.message||err));
+  }
+  input.value='';
+}
+
+/* ---------- Borrado selectivo de correctivos ---------- */
+async function borrarSeleccionCorrectivos(){
+  const alcance = document.getElementById('bs_alcance').value;
+  const planta = document.getElementById('bs_planta').value;
+  const ubt = document.getElementById('bs_ubt').value;
+  const maquina = document.getElementById('bs_maquina').value;
+  const btn = document.getElementById('bs_btn');
+
+  const todas = await listSheets();
+  let objetivo = [];
+  let desc = '';
+  if(alcance === 'planta'){
+    objetivo = todas.filter(s=>s.planta===planta);
+    desc = `todos los correctivos de ${planta}`;
+  } else if(alcance === 'ubt'){
+    objetivo = todas.filter(s=>s.planta===planta && s.ubtNo===ubt);
+    desc = `los correctivos de UBT ${ubt} (${planta})`;
+  } else if(alcance === 'maquina'){
+    objetivo = todas.filter(s=>s.planta===planta && s.ubtNo===ubt && s.maquina===maquina);
+    desc = `los correctivos de ${maquina} en UBT ${ubt} (${planta})`;
+  }
+
+  if(objetivo.length === 0){ showToast('No hay hojas que coincidan'); return; }
+
+  if(btn.dataset.confirm !== '1'){
+    btn.dataset.confirm = '1';
+    btn.textContent = `⚠️ Toca de nuevo para borrar ${objetivo.length} hoja(s) — ${desc}`;
+    setTimeout(()=>{ btn.dataset.confirm=''; btn.textContent='🗑️ Borrar la selección'; }, 6000);
+    return;
+  }
+
+  btn.textContent = 'Borrando...';
+  let ok=0;
+  for(const s of objetivo){
+    try{
+      await sbFetch('hojas?clave=eq.'+encodeURIComponent(s.key), { method:'DELETE', prefer:'return=minimal' });
+      ok++;
+    }catch(e){ console.warn(e); }
+  }
+  colaImpresion = [];
+  btn.dataset.confirm='';
+  showToast(`✓ ${ok} hoja(s) borradas — ${desc}`);
+  render();
+}
+
+function cambiarAlcanceBorrado(){
+  const alcance = document.getElementById('bs_alcance').value;
+  document.getElementById('bs_wrap_ubt').style.display = (alcance==='ubt'||alcance==='maquina') ? 'flex' : 'none';
+  document.getElementById('bs_wrap_maquina').style.display = (alcance==='maquina') ? 'flex' : 'none';
+}
+
+function actualizarUbtsBorrado(){
+  const planta = document.getElementById('bs_planta').value;
+  const sel = document.getElementById('bs_ubt');
+  sel.innerHTML = ubtsDeLaPlanta(STATE.plantasCfg, planta).map(u=>`<option>${u}</option>`).join('');
 }
 
 async function descargarRespaldo(){
