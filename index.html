@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de Correctivo — Lear</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#8a1f1f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Correctivo">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --ink:#1a1a1a; --line:#2b2b2b; --paper:#ffffff; --shell:#f0f2f4;
+    --accent:#8a1f1f; --accent2:#0f3d5c; --muted:#6b7280; --green:#1a7a3c; --amber:#a16d07;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--shell);color:var(--ink);}
+  .topbar{background:var(--line);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:10;}
+  .topbar h1{font-size:15px;margin:0;font-weight:700;}
+  .topbar .who{font-size:12px;opacity:.85;}
+  .topbar a{color:#9fd0ff;font-size:12px;text-decoration:none;margin-left:10px;}
+  .wrap{max-width:1000px;margin:0 auto;padding:16px;}
+  .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px #0001;}
+  h2{font-size:16px;margin:0 0 12px;}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+  .field label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;}
+  .field input, .field select, .field textarea{padding:10px;border:1px solid #ccd1d6;border-radius:6px;font-size:14px;font-family:inherit;}
+  .field textarea{min-height:60px;resize:vertical;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .btn{background:var(--accent);color:#fff;border:none;padding:12px 18px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;width:100%;}
+  .btn.secondary{background:var(--accent2);}
+  .btn.small{width:auto;padding:8px 14px;font-size:13px;}
+  .btn.ghost{background:#eee;color:#333;}
+  .checkline{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:10px;}
+  .role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .role-card{border-radius:10px;padding:20px;text-align:center;cursor:pointer;border:2px solid transparent;box-shadow:0 1px 4px #0001;}
+  .role-card:hover{border-color:var(--accent);}
+  .role-card .emoji{font-size:28px;}
+  .role-card .name{font-weight:700;margin-top:6px;font-size:14px;}
+  .role-card.rc-tecnico{background:#f2c94c;color:#1a1a1a;}
+  .role-card.rc-auditor{background:#ffffff;color:#1a1a1a;border-color:#ccc;}
+  .role-card.rc-apqp{background:#a13636;color:#fff;}
+  .role-card.rc-supervisor{background:#8a8f98;color:#fff;}
+  .role-card.rc-admin{background:#1a1a1a;color:#fff;}
+  .planta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;max-width:480px;}
+  .planta-card{background:#fff;border-radius:8px;padding:10px 8px;text-align:center;cursor:pointer;border:2px solid transparent;box-shadow:0 1px 4px #0001;font-weight:700;font-size:12.5px;}
+  .planta-card:hover{border-color:var(--accent2);}
+  .ubt-cols{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;}
+  .ubt-col{display:flex;flex-direction:column;gap:8px;min-width:110px;}
+  .ubt-col-title{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:2px;}
+  .ubt-btn{border:none;padding:10px 14px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;text-align:left;}
+  .ubt-btn:hover{opacity:.85;}
+  .ubt-btn.p1{background:#1a7a3c;color:#fff;}
+  .ubt-btn.p2{background:#1a1a1a;color:#fff;}
+  .ubt-btn.p3{background:#0f3d5c;color:#fff;}
+  .ubt-btn.p4{background:#e0b400;color:#1a1a1a;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .filters select, .filters input{padding:7px 9px;border:1px solid #ccd1d6;border-radius:6px;font-size:13px;}
+  .empty{text-align:center;color:var(--muted);padding:30px;font-size:13px;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:50;}
+  .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;}
+  .qr-box{text-align:center;border:1px solid #e2e5e8;border-radius:8px;padding:12px;}
+  .qr-box .label{font-size:12px;font-weight:700;margin-top:6px;}
+  .ubt-check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;margin-bottom:12px;}
+  .ubt-check-grid label{display:flex;align-items:center;gap:5px;font-size:12.5px;background:#f5f6f7;padding:6px 8px;border-radius:5px;}
+  .notif{background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;}
+  .notif b{color:var(--amber);}
+  table.admin-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px;}
+  table.admin-tbl th, table.admin-tbl td{border:1px solid #e2e5e8;padding:6px 8px;text-align:left;}
+  table.admin-tbl th{background:#f5f6f7;}
+  .pass-inline{display:flex;gap:6px;margin-top:6px;}
+  .pass-inline input{padding:6px 8px;border:1px solid #ccd1d6;border-radius:5px;font-size:12px;flex:1;}
+  .pass-inline button{padding:6px 10px;border:none;border-radius:5px;background:var(--accent2);color:#fff;font-size:12px;font-weight:700;cursor:pointer;}
+  .edit-panel{background:#fef8ec;border:1px solid #f0c674;border-radius:8px;padding:12px;margin-top:8px;}
+  .planta-block{border:1px solid #e2e5e8;border-radius:8px;padding:12px;margin-bottom:12px;}
+  .planta-block h3{margin:0 0 8px;font-size:13.5px;}
+  .ubt-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;}
+  .ubt-row input{flex:1;padding:6px 8px;border:1px solid #ccd1d6;border-radius:5px;font-size:12.5px;}
+  .ubt-row button{padding:5px 9px;border:none;border-radius:5px;background:#e2e5e8;cursor:pointer;font-size:12px;}
+
+  .sheet-print-wrap{margin-bottom:16px;}
+  .sheet-page{border:1px solid #333;padding:14px;background:#fff;font-size:11px;overflow-x:auto;}
+  .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:6px;margin-bottom:8px;}
+  .sheet-brand{font-size:16px;font-weight:800;color:var(--accent);}
+  .sheet-brand small{display:block;font-size:8px;color:var(--muted);font-weight:600;}
+  .sheet-title{font-size:12px;font-weight:800;}
+  .sheet-monthyear{font-size:13px;font-weight:800;text-align:right;}
+  .chk-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:2px 12px;font-size:9.5px;margin-bottom:8px;}
+  .chk-grid span{display:flex;justify-content:space-between;padding:1px 0;}
+  .chk-grid .on::after{content:'☑'; margin-left:4px;}
+  .chk-grid .off::after{content:'☐'; margin-left:4px;}
+  .sheet-meta{font-size:10.5px;margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap;}
+  .sheet-meta b{font-weight:700;}
+  table.sheet-table{width:100%;border-collapse:collapse;min-width:950px;}
+  table.sheet-table th, table.sheet-table td{border:1px solid #333;padding:4px;font-size:9px;text-align:center;vertical-align:middle;}
+  table.sheet-table th{background:#f2f2f2;font-weight:700;}
+  table.sheet-table td.left{text-align:left;}
+  .firma-ok{color:var(--green);font-weight:700;}
+  .firma-btn, .edit-btn{background:var(--accent2);color:#fff;border:none;padding:4px 8px;border-radius:4px;font-size:9px;cursor:pointer;font-weight:700;}
+  .edit-btn{background:#555;margin-top:2px;}
+  .no-print{}
+  @media print{
+    .no-print{display:none !important;}
+    body.printing-single .wrap > *:not(.print-target){display:none !important;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* ---------- Configuración fija ---------- */
+const MAQ_COR = ["Prueba Eléctrica","Pre-Eléctrica","Dimensiones","Sistema de Navegación","Encintadoras","Rotary","Impresoras","Tableros de Clip","Canaleta","Torques","Mesa de Amarre","Expansor de Grommet"];
+const checklistGroups = [
+  ["Prueba Eléctrica","Pre-Eléctrica","Sistema de Navegación"],
+  ["Encintadoras","Rotary","Impresoras"],
+  ["Dimensiones","Tableros de Clip","Canaleta"],
+  ["Torques","Mesa de Amarre","Expansor de Grommet"],
+  ["Otros"]
+];
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const MAX_FILAS_POR_HOJA = 7;
+
+const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
+const DEFAULT_PLANTAS = {
+  "Planta 1": ["501-1","501-2","502-1","502-2","503-1","503-2","504-1","505-1","506-1","507-1","508-1"],
+  "Planta 2": ["601-1","601-2","602-1","602-2","602-3","603-1","603-2","604-1","604-2","604-3","605-1","605-1.0","605-1.1","605-1.2","606-1","606-1B","606-2","606-3","606-4","607-1","607-2","607-3","608-1","608-2","608-3","609-1","609-2","609-4","609-5","611-1","611-2","611-3","612-1","612-2","612-3"],
+  "Planta 3": ["701-1","701-2","702-1","702-2","702-3","703-1"],
+  "Partes de Servicio": ["520"]
+};
+
+const ROLES = {
+  tecnico:   {label:"Técnico de Mantenimiento", emoji:"🔧"},
+  auditor:   {label:"Auditor de Calidad", emoji:"🧾"},
+  apqp:      {label:"APQP", emoji:"✅"},
+  supervisor:{label:"Supervisor de Mantenimiento", emoji:"👁️"},
+  admin:     {label:"Administrador", emoji:"⚙️"},
+};
+const DEFAULT_CODES = { tecnico:"Matto", auditor:"Calidad", apqp:"APQP", supervisor:"SupMantto", admin:"8102vgreal" };
+
+function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function nowLabel(){ return new Date().toLocaleString('es-MX'); }
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function sheetKey(planta,ubt,maquina,mes,anio,pagina){ return `sheet:${slug(planta)}--${slug(ubt)}--${slug(maquina)}--${slug(mes)}--${slug(anio)}--p${pagina}`; }
+
+/* ---------- Conexión a Supabase ---------- */
+const SUPABASE_URL = 'https://pddugjlydcggotamstav.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_n0METrGffoJXnnbBPBJ1AA_pjIz69I9';
+
+async function sbFetch(path, options={}){
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    ...options,
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer || 'return=representation',
+      ...(options.headers||{})
+    }
+  });
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error('Supabase ' + res.status + ': ' + txt);
+  }
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+async function getConfig(){
+  try{
+    const r = await sbFetch('config?clave=eq.accesscodes&select=valor');
+    return (r && r[0]) ? r[0].valor : { ...DEFAULT_CODES };
+  }catch(e){ console.warn(e); return { ...DEFAULT_CODES }; }
+}
+async function saveConfig(cfg){
+  await sbFetch('config?on_conflict=clave', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave:'accesscodes', valor: cfg, actualizado_en: new Date().toISOString() })
+  });
+}
+async function getPlantasConfig(){
+  try{
+    const r = await sbFetch('config?clave=eq.plantas&select=valor');
+    return (r && r[0]) ? r[0].valor : JSON.parse(JSON.stringify(DEFAULT_PLANTAS));
+  }catch(e){ console.warn(e); return JSON.parse(JSON.stringify(DEFAULT_PLANTAS)); }
+}
+async function savePlantasConfig(cfg){
+  await sbFetch('config?on_conflict=clave', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave:'plantas', valor: cfg, actualizado_en: new Date().toISOString() })
+  });
+}
+function ubtsDeLaPlanta(plantasCfg, planta){
+  if(planta==='Partes de Servicio'){
+    const union = [...(plantasCfg["Planta 1"]||[]), ...(plantasCfg["Planta 2"]||[]), ...(plantasCfg["Planta 3"]||[]), ...(plantasCfg["Partes de Servicio"]||[])];
+    return [...new Set(union)];
+  }
+  return plantasCfg[planta] || [];
+}
+function origenDeUbt(plantasCfg, ubt){
+  if((plantasCfg["Planta 1"]||[]).includes(ubt)) return "Planta 1";
+  if((plantasCfg["Planta 2"]||[]).includes(ubt)) return "Planta 2";
+  if((plantasCfg["Planta 3"]||[]).includes(ubt)) return "Planta 3";
+  return "Partes de Servicio";
+}
+function renderUbtColumnas(ubts){
+  if(STATE.plantaHoy !== 'Partes de Servicio'){
+    const clase = claseOrigen(STATE.plantaHoy);
+    return `<div class="ubt-cols"><div class="ubt-col">
+      ${ubts.map(u=>`<button class="ubt-btn ${clase}" onclick="elegirUbt('${u.replace(/'/g,"\\'")}')">${u}</button>`).join('')}
+    </div></div>`;
+  }
+  const grupos = { 'Planta 1':[], 'Planta 2':[], 'Planta 3':[], 'Partes de Servicio':[] };
+  ubts.forEach(u => grupos[origenDeUbt(STATE.plantasCfg,u)].push(u));
+  return `<div class="ubt-cols">
+    ${Object.entries(grupos).filter(([,arr])=>arr.length).map(([nombre,arr])=>`
+      <div class="ubt-col">
+        <div class="ubt-col-title">${nombre}</div>
+        ${arr.map(u=>`<button class="ubt-btn ${claseOrigen(nombre)}" onclick="elegirUbt('${u.replace(/'/g,"\\'")}')">${u}</button>`).join('')}
+      </div>`).join('')}
+  </div>`;
+}
+function claseOrigen(nombre){
+  return nombre==='Planta 1'?'p1':nombre==='Planta 2'?'p2':nombre==='Planta 3'?'p3':'p4';
+}
+function todasLasUbts(plantasCfg){
+  const union = [];
+  PLANTA_NOMBRES.forEach(p => union.push(...(plantasCfg[p]||[])));
+  return [...new Set(union)];
+}
+
+async function getUsuario(nombre){
+  try{
+    const r = await sbFetch('usuarios?nombre_slug=eq.'+encodeURIComponent(slug(nombre))+'&select=*');
+    if(!r || !r[0]) return null;
+    const u = r[0];
+    return { nombre: u.nombre, rol: u.rol, gafete: u.gafete, ubtsPorPlanta: u.ubts_por_planta || {} };
+  }catch(e){ console.warn(e); return null; }
+}
+async function saveUsuario(u){
+  await sbFetch('usuarios?on_conflict=nombre_slug', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({
+      nombre_slug: slug(u.nombre), nombre: u.nombre, rol: u.rol,
+      gafete: u.gafete, ubts_por_planta: u.ubtsPorPlanta || {}
+    })
+  });
+}
+async function deleteUsuario(nombre){
+  await sbFetch('usuarios?nombre_slug=eq.'+encodeURIComponent(slug(nombre)), { method:'DELETE', prefer:'return=minimal' });
+}
+async function listUsuarios(){
+  try{
+    const r = await sbFetch('usuarios?select=*&order=nombre.asc');
+    return (r||[]).map(u=>({ nombre:u.nombre, rol:u.rol, gafete:u.gafete, ubtsPorPlanta:u.ubts_por_planta||{} }));
+  }catch(e){ console.warn(e); return []; }
+}
+async function getSheet(key){
+  try{
+    const r = await sbFetch('hojas?clave=eq.'+encodeURIComponent(key)+'&select=*');
+    if(!r || !r[0]) return null;
+    const h = r[0];
+    return { key:h.clave, planta:h.planta, ubtNo:h.ubt_no, maquina:h.maquina, mes:h.mes, anio:h.anio, pagina:h.pagina, filas:h.filas||[] };
+  }catch(e){ console.warn(e); return null; }
+}
+async function saveSheet(key, sheet){
+  await sbFetch('hojas?on_conflict=clave', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({
+      clave: key, planta: sheet.planta, ubt_no: sheet.ubtNo, maquina: sheet.maquina,
+      mes: sheet.mes, anio: sheet.anio, pagina: sheet.pagina||1,
+      filas: sheet.filas||[], actualizado_en: new Date().toISOString()
+    })
+  });
+}
+async function listSheets(){
+  try{
+    const r = await sbFetch('hojas?select=*');
+    return (r||[]).map(h=>({ key:h.clave, planta:h.planta, ubtNo:h.ubt_no, maquina:h.maquina, mes:h.mes, anio:h.anio, pagina:h.pagina, filas:h.filas||[] }));
+  }catch(e){ console.warn(e); return []; }
+}
+
+/* ---------- Estado global ---------- */
+let STATE = { rol:'', nombre:'', usuario:null, codes:null, plantasCfg:null, editandoUbts:false, plantaHoy:null, ubtElegida:null };
+
+function showToast(msg){
+  const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t); setTimeout(()=>t.remove(), 2200);
+}
+function getParams(){
+  const p = new URLSearchParams(window.location.search);
+  return { rol: p.get('rol') || '', nombre: p.get('nombre') || '' };
+}
+
+/* ---------- Render raíz ---------- */
+async function render(){
+  const app = document.getElementById('app');
+  if(!STATE.codes) STATE.codes = await getConfig();
+  if(!STATE.plantasCfg) STATE.plantasCfg = await getPlantasConfig();
+  if(!STATE.rol){ app.innerHTML = renderRolePicker(); return; }
+
+  if(STATE.rol==='admin'){
+    if(!STATE.adminOk){ app.innerHTML = renderTopbar() + renderAdminLogin(); return; }
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderAdmin()}</div>`;
+    setTimeout(renderQRCodes, 50);
+    return;
+  }
+
+  if(STATE.nombre && !STATE.usuario){ STATE.usuario = await getUsuario(STATE.nombre); }
+  const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
+  const necesitaGafete = STATE.nombre && !STATE.usuario;
+  if(necesitaGafete){
+    app.innerHTML = renderTopbar() + renderGafeteSetup();
+    return;
+  }
+
+  if(STATE.viendoTodo){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVerCorrectivos()}</div>`;
+    setTimeout(filtrarVerTodo, 50);
+    return;
+  }
+
+  const rolesConPlanta = ['tecnico','auditor','apqp'];
+  if(rolesConPlanta.includes(STATE.rol) && !STATE.plantaHoy){
+    app.innerHTML = renderTopbar() + renderPlantaPicker();
+    return;
+  }
+
+  if(esAuditorTipo && STATE.plantaHoy){
+    const asignadas = (STATE.usuario.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
+    if(asignadas.length===0 || STATE.editandoUbts){
+      app.innerHTML = renderTopbar() + renderUbtsPlantaSetup();
+      return;
+    }
+  }
+
+  let body = '';
+  try{
+    if(STATE.rol==='tecnico') body = await renderTecnico();
+    else if(STATE.rol==='auditor') body = await renderAuditor();
+    else if(STATE.rol==='apqp') body = await renderApqp();
+    else if(STATE.rol==='supervisor') body = await renderSupervisor();
+  }catch(err){
+    body = `<div class="card"><h2>⚠️ Error</h2><p style="font-size:13px;color:var(--muted);">${escapeHtml(err.message||String(err))}</p></div>`;
+  }
+  app.innerHTML = renderTopbar() + `<div class="wrap">${body}</div>`;
+  if(STATE.rol==='supervisor') setTimeout(filtrarSupervisor, 50);
+}
+
+function renderTopbar(){
+  const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
+  const rolesConPlanta = ['tecnico','auditor','apqp'];
+  const puedeVerTodo = STATE.rol==='supervisor' || (rolesConPlanta.includes(STATE.rol) && STATE.ubtElegida);
+  return `<div class="topbar no-print"><h1>Correctivo — Lear</h1><div>
+      <span class="who">${ROLES[STATE.rol]?.emoji||''} ${ROLES[STATE.rol]?.label||STATE.rol}${STATE.nombre?(' · '+STATE.nombre):''}${STATE.usuario?.gafete?(' · Gafete '+STATE.usuario.gafete):''}${STATE.plantaHoy?(' · '+STATE.plantaHoy):''}</span>
+      ${esAuditorTipo && STATE.usuario && STATE.plantaHoy && !STATE.viendoTodo ? `<a href="#" onclick="editarUbts();return false;">Editar mis UBTs</a>`:''}
+      ${rolesConPlanta.includes(STATE.rol) && STATE.plantaHoy && !STATE.viendoTodo ? `<a href="#" onclick="cambiarPlanta();return false;">Cambiar planta</a>`:''}
+      ${puedeVerTodo ? (STATE.viendoTodo ? `<a href="#" onclick="volverDeVerTodo();return false;">← Volver</a>` : `<a href="#" onclick="verCorrectivos();return false;">👁️ Ver correctivos${STATE.rol!=='supervisor'?(' de '+STATE.ubtElegida):''}</a>`) : ''}
+      <a href="#" onclick="cambiarRol();return false;">Cambiar</a>
+    </div></div>`;
+}
+function editarUbts(){ STATE.editandoUbts = true; render(); }
+function cambiarPlanta(){ STATE.plantaHoy = null; STATE.ubtElegida = null; sheetActivaKey = null; render(); }
+function verCorrectivos(){ STATE.viendoTodo = true; render(); }
+function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
+function cambiarRol(){
+  STATE = { rol:'', nombre:'', usuario:null, codes:STATE.codes, plantasCfg:STATE.plantasCfg, editandoUbts:false, plantaHoy:null, ubtElegida:null };
+  const url = new URL(window.location.href); url.search=''; window.history.replaceState({}, '', url);
+  render();
+}
+
+function renderRolePicker(){
+  return `
+  <div class="wrap">
+    <div class="card">
+      <h2>¿Quién eres?</h2>
+      <div class="role-grid">
+        ${Object.entries(ROLES).map(([key,r])=>`
+          <div class="role-card rc-${key}" onclick="elegirRol('${key}')">
+            <div class="emoji">${r.emoji}</div><div class="name">${r.label}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="card" id="nombre_form" style="display:none;">
+      <h2 id="nombre_form_title">Acceso</h2>
+      <div class="field"><label>Tu nombre</label><input id="nombre_input" placeholder="Escribe tu nombre"></div>
+      <div class="field"><label>Código de acceso</label><input id="codigo_input" type="password" placeholder="Código de tu rol"></div>
+      <div id="codigo_error" style="color:#b00;font-size:12px;margin-bottom:8px;display:none;">Código incorrecto.</div>
+      <button class="btn" onclick="confirmarAcceso()">Continuar</button>
+    </div>
+  </div>`;
+}
+let rolSeleccionadoTemp = '';
+function elegirRol(rol){
+  if(rol==='admin'){ STATE.rol = rol; STATE.nombre=''; STATE.adminOk=false; render(); return; }
+  rolSeleccionadoTemp = rol;
+  document.getElementById('nombre_form_title').textContent = 'Acceso — ' + ROLES[rol].label;
+  document.getElementById('nombre_form').style.display = 'block';
+  document.getElementById('nombre_form').scrollIntoView({behavior:'smooth'});
+  document.getElementById('nombre_input').focus();
+}
+function confirmarAcceso(){
+  const nombre = document.getElementById('nombre_input').value.trim();
+  const codigo = document.getElementById('codigo_input').value;
+  if(!nombre){ document.getElementById('nombre_input').style.borderColor='red'; return; }
+  if(codigo !== STATE.codes[rolSeleccionadoTemp]){ document.getElementById('codigo_error').style.display='block'; return; }
+  STATE.rol = rolSeleccionadoTemp; STATE.nombre = nombre; STATE.usuario = null;
+  render();
+}
+
+/* ---------- Configuración: gafete (todos, una vez) ---------- */
+function renderGafeteSetup(){
+  return `<div class="wrap"><div class="card">
+    <h2>Registra tu No. de Gafete</h2>
+    <p style="font-size:13px;color:var(--muted);">Solo se pide una vez.</p>
+    <div class="field"><label>No. de Gafete</label><input id="gafete_input"></div>
+    <button class="btn" onclick="guardarGafete()">Guardar y continuar</button>
+  </div></div>`;
+}
+async function guardarGafete(){
+  const gafete = document.getElementById('gafete_input').value.trim();
+  if(!gafete){ showToast('⚠️ Escribe tu No. de Gafete'); return; }
+  STATE.usuario = { nombre: STATE.nombre, gafete, rol: STATE.rol, ubtsPorPlanta: {} };
+  try{
+    await saveUsuario(STATE.usuario);
+  }catch(err){
+    showToast('⚠️ No se pudo guardar: ' + (err.message||String(err)));
+    return;
+  }
+  render();
+}
+
+/* ---------- Selector de planta del día (Técnico, Auditor, APQP) ---------- */
+function renderPlantaPicker(){
+  return `<div class="wrap"><div class="card">
+    <h2>¿En qué planta trabajarás hoy?</h2>
+    <div class="planta-grid">
+      ${PLANTA_NOMBRES.map(p=>`<div class="planta-card" onclick="elegirPlantaHoy('${p.replace(/'/g,"\\'")}')">${p}</div>`).join('')}
+    </div>
+  </div></div>`;
+}
+function elegirPlantaHoy(p){ STATE.plantaHoy = p; STATE.ubtElegida = null; render(); }
+function elegirUbt(u){ STATE.ubtElegida = u; sheetActivaKey = null; render(); }
+
+/* ---------- UBTs asignados — solo de la planta activa (Auditor / APQP) ---------- */
+function renderUbtsPlantaSetup(){
+  const listaUbts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
+  const actuales = (STATE.usuario.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
+  return `<div class="wrap"><div class="card">
+    <h2>¿Qué UBT(s) llevas en ${STATE.plantaHoy}?</h2>
+    <div class="ubt-check-grid">
+      ${listaUbts.map(u=>`<label><input type="checkbox" class="ubt-chk" value="${u}" ${actuales.includes(u)?'checked':''}> ${u}</label>`).join('')}
+    </div>
+    <button class="btn" onclick="guardarUbtsPlanta()">Guardar${STATE.editandoUbts?' cambios':' y continuar'}</button>
+    ${STATE.editandoUbts ? `<button class="btn ghost" style="margin-top:8px;" onclick="STATE.editandoUbts=false;render();">Cancelar</button>` : ''}
+  </div></div>`;
+}
+async function guardarUbtsPlanta(){
+  const seleccion = [...document.querySelectorAll('.ubt-chk:checked')].map(c=>c.value);
+  if(seleccion.length===0){ showToast('⚠️ Selecciona al menos un UBT'); return; }
+  if(!STATE.usuario.ubtsPorPlanta) STATE.usuario.ubtsPorPlanta = {};
+  STATE.usuario.ubtsPorPlanta[STATE.plantaHoy] = seleccion;
+  try{ await saveUsuario(STATE.usuario); }
+  catch(err){ showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
+  STATE.editandoUbts = false;
+  showToast('Guardado ✓');
+  render();
+}
+
+/* ---------- TÉCNICO: planta del día -> UBT -> máquina -> hoja ---------- */
+let sheetActivaKey = null;
+let sheetActivaParams = null;
+let maquinaEnCurso = null;
+
+async function renderTecnico(){
+  if(!STATE.ubtElegida){
+    const ubts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
+    return `
+    <div class="card"><button class="btn ghost small" onclick="STATE.plantaHoy=null;render();">← Cambiar planta</button></div>
+    <div class="card">
+      <h2>UBTs — ${STATE.plantaHoy}</h2>
+      ${renderUbtColumnas(ubts)}
+    </div>`;
+  }
+  if(!sheetActivaKey){
+    return `
+    <div class="card"><button class="btn ghost small" onclick="STATE.ubtElegida=null;render();">← Elegir otro UBT</button></div>
+    <div class="card">
+      <h2>UBT ${STATE.ubtElegida} — Máquina y mes</h2>
+      <div class="field"><label>Máquina / Estación</label><select id="s_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
+      <div class="row2">
+        <div class="field"><label>Mes</label><select id="s_mes">${MESES.map(m=>`<option ${m==='Agosto'?'selected':''}>${m}</option>`).join('')}</select></div>
+        <div class="field"><label>Año</label><input id="s_anio" value="2026"></div>
+      </div>
+      <button class="btn" onclick="abrirHoja()">Abrir / Crear hoja</button>
+    </div>`;
+  }
+  const sheet = await getSheet(sheetActivaKey);
+  sheet.key = sheetActivaKey;
+  const llena = (sheet.filas||[]).length >= MAX_FILAS_POR_HOJA;
+  return `
+    <div class="card"><button class="btn ghost small" onclick="sheetActivaKey=null;render();">← Elegir otra máquina</button>
+      <button class="btn ghost small" style="margin-left:8px;" onclick="STATE.ubtElegida=null;sheetActivaKey=null;render();">← Elegir otro UBT</button></div>
+    <div class="card">
+      <h2>Agregar registro — Página ${sheetActivaParams.pagina} (${(sheet.filas||[]).length}/${MAX_FILAS_POR_HOJA})</h2>
+      ${llena ? `
+        <p style="font-size:13px;color:var(--amber);font-weight:700;">Esta hoja ya tiene ${MAX_FILAS_POR_HOJA} registros (llena).</p>
+        <button class="btn secondary" onclick="siguientePagina()">➕ Abrir Página ${sheetActivaParams.pagina+1}</button>
+      ` : `
+      <div class="row3">
+        <div class="field"><label>Fecha</label><input id="f_fecha" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Hora Inicio</label><input id="f_hi" type="time"></div>
+        <div class="field"><label>Hora Final</label><input id="f_hf" type="time"></div>
+      </div>
+      <div class="field"><label>No. Gafete</label><input id="f_gafete" value="${STATE.usuario?.gafete||''}"></div>
+      <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas"></textarea></div>
+      <div class="field"><label>Acciones Correctivas</label><textarea id="f_acciones"></textarea></div>
+      <div class="field"><label>Material utilizado en modificación</label><textarea id="f_material"></textarea></div>
+      <label class="checkline"><input type="checkbox" id="f_movio"> Se movió módulo de posición</label>
+      <label class="checkline"><input type="checkbox" id="f_verifico"> Se verificó módulo quede en cuadrante especificado</label>
+      <label class="checkline"><input type="checkbox" id="f_solicitar_apqp"> 📩 Solicitar firma de APQP (le da acceso a este registro)</label>
+      <button class="btn" onclick="agregarFila()">Guardar registro y notificar</button>
+      `}
+    </div>
+    <div class="card"><h2>Hoja actual</h2>${renderSheetPrintWrap(sheet, {role:'tecnico'})}</div>`;
+}
+
+
+
+async function abrirPaginaAutomatica(planta,ubt,maquina,mes,anio){
+  let pagina = 1;
+  while(true){
+    const key = sheetKey(planta,ubt,maquina,mes,anio,pagina);
+    let sheet = await getSheet(key);
+    if(!sheet){ sheet = { planta, ubtNo:ubt, maquina, mes, anio, pagina, filas: [] }; await saveSheet(key, sheet); }
+    if((sheet.filas||[]).length < MAX_FILAS_POR_HOJA){
+      sheetActivaKey = key;
+      sheetActivaParams = {planta,ubt,maquina,mes,anio,pagina};
+      return;
+    }
+    pagina++;
+  }
+}
+async function abrirHoja(){
+  const maquina = document.getElementById('s_maquina').value;
+  const mes = document.getElementById('s_mes').value;
+  const anio = document.getElementById('s_anio').value.trim();
+  await abrirPaginaAutomatica(STATE.plantaHoy, STATE.ubtElegida, maquina, mes, anio);
+  render();
+}
+async function siguientePagina(){
+  const p = sheetActivaParams;
+  await abrirPaginaAutomatica(p.planta,p.ubt,p.maquina,p.mes,p.anio);
+  render();
+}
+
+async function agregarFila(){
+  const sintomas = document.getElementById('f_sintomas').value.trim();
+  if(!sintomas){ showToast('⚠️ Escribe los Síntomas/Fallas'); return; }
+  const sheet = await getSheet(sheetActivaKey);
+  if((sheet.filas||[]).length >= MAX_FILAS_POR_HOJA){ showToast('⚠️ Esta hoja ya está llena'); render(); return; }
+  const solicitarApqp = document.getElementById('f_solicitar_apqp').checked;
+  const fila = {
+    id: uid(),
+    fecha: document.getElementById('f_fecha').value,
+    horaInicio: document.getElementById('f_hi').value,
+    horaFinal: document.getElementById('f_hf').value,
+    gafete: document.getElementById('f_gafete').value.trim(),
+    sintomas, acciones: document.getElementById('f_acciones').value.trim(),
+    material: document.getElementById('f_material').value.trim(),
+    seMovioModulo: document.getElementById('f_movio').checked,
+    seVerificoModulo: document.getElementById('f_verifico').checked,
+    tecnico: STATE.nombre,
+    firmaAuditorNombre:'', firmaAuditorFecha:'',
+    firmaAPQPNombre:'', firmaAPQPFecha:'',
+    estadoAuditor: 'pendiente',
+    estadoAPQP: solicitarApqp ? 'pendiente' : 'no_aplica',
+    creadoEn: new Date().toISOString()
+  };
+  sheet.filas.push(fila);
+  try{ await saveSheet(sheetActivaKey, sheet); }
+  catch(err){ showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
+  showToast('Registro guardado y notificado ✓');
+  /* Regresa a la ventana de todas las UBT de la planta */
+  sheetActivaKey = null;
+  STATE.ubtElegida = null;
+  render();
+}
+
+/* ---------- AUDITOR ---------- */
+async function renderAuditor(){
+  const misUbts = (STATE.usuario?.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
+  const sheets = (await listSheets()).filter(s => s.planta===STATE.plantaHoy && misUbts.includes(s.ubtNo));
+  const pendientesFilas = [];
+  sheets.forEach(s => (s.filas||[]).forEach(f => { if(f.estadoAuditor==='pendiente') pendientesFilas.push({s,f}); }));
+  const sheetsConPendientes = sheets.filter(s => (s.filas||[]).some(f=>f.estadoAuditor==='pendiente'));
+  return `
+  <div class="card"><h2>🔔 Notificaciones (${pendientesFilas.length})</h2>
+    ${pendientesFilas.length===0 ? '<div class="empty">Sin notificaciones pendientes.</div>' :
+      pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> realizó una reparación en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha} — necesita tu firma.</div>`).join('')}
+  </div>
+  <div class="card"><h2>Tus hojas asignadas en ${STATE.plantaHoy} (UBT: ${misUbts.join(', ')||'—'})</h2>
+    ${sheetsConPendientes.length===0 ? '<div class="empty">No hay hojas con pendientes.</div>' :
+      sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'auditor'})}</div>`).join('')}
+  </div>`;
+}
+async function firmarAuditor(sheetKeyStr, filaId){
+  const sheet = await getSheet(sheetKeyStr);
+  const fila = sheet.filas.find(f=>f.id===filaId);
+  if(!fila) return;
+  fila.firmaAuditorNombre = STATE.nombre; fila.firmaAuditorFecha = nowLabel(); fila.estadoAuditor = 'firmado';
+  await saveSheet(sheetKeyStr, sheet);
+  showToast('Firmado ✓'); render();
+}
+
+/* ---------- APQP ---------- */
+async function renderApqp(){
+  const misUbts = (STATE.usuario?.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
+  const sheets = (await listSheets()).filter(s => s.planta===STATE.plantaHoy && misUbts.includes(s.ubtNo));
+  const pendientesFilas = [];
+  sheets.forEach(s => (s.filas||[]).forEach(f => { if(f.estadoAPQP==='pendiente') pendientesFilas.push({s,f}); }));
+  const sheetsConPendientes = sheets.filter(s => (s.filas||[]).some(f=>f.estadoAPQP==='pendiente'));
+  return `
+  <div class="card"><h2>🔔 Notificaciones (${pendientesFilas.length})</h2>
+    ${pendientesFilas.length===0 ? '<div class="empty">Sin notificaciones pendientes.</div>' :
+      pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> solicitó tu firma en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha}.</div>`).join('')}
+  </div>
+  <div class="card"><h2>Tus hojas asignadas en ${STATE.plantaHoy} (UBT: ${misUbts.join(', ')||'—'})</h2>
+    ${sheetsConPendientes.length===0 ? '<div class="empty">No hay hojas con pendientes.</div>' :
+      sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'apqp'})}</div>`).join('')}
+  </div>`;
+}
+async function firmarApqp(sheetKeyStr, filaId){
+  const sheet = await getSheet(sheetKeyStr);
+  const fila = sheet.filas.find(f=>f.id===filaId);
+  if(!fila) return;
+  fila.firmaAPQPNombre = STATE.nombre; fila.firmaAPQPFecha = nowLabel(); fila.estadoAPQP = 'firmado';
+  await saveSheet(sheetKeyStr, sheet);
+  showToast('Firmado ✓'); render();
+}
+
+/* ---------- Ver correctivos (disponible para todos los roles, solo lectura) ---------- */
+let sheetsCacheVerTodo = [];
+async function renderVerCorrectivos(){
+  sheetsCacheVerTodo = await listSheets();
+  const plantaDefault = STATE.rol!=='supervisor' ? (STATE.plantaHoy||'') : '';
+  const ubtDefault = STATE.rol!=='supervisor' ? (STATE.ubtElegida||'') : '';
+  return `<div class="card"><h2>Ver correctivos — solo lectura</h2>
+    <div class="filters">
+      <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()">
+      <input id="vt_filtro_ubt" placeholder="Filtrar por UBT" value="${escapeHtml(ubtDefault)}" oninput="filtrarVerTodo()">
+    </div>
+    <div id="vt_lista"></div>
+  </div>`;
+}
+function filtrarVerTodo(){
+  const pEl = document.getElementById('vt_filtro_planta'), uEl = document.getElementById('vt_filtro_ubt');
+  if(!pEl) return;
+  const planta = pEl.value.toLowerCase(), ubt = uEl.value.toLowerCase();
+  const filtradas = sheetsCacheVerTodo.filter(s => (!planta || (s.planta||'').toLowerCase().includes(planta)) && (!ubt || (s.ubtNo||'').toLowerCase().includes(ubt)));
+  document.getElementById('vt_lista').innerHTML = filtradas.length===0 ? '<div class="empty">Sin hojas.</div>' : renderAgrupadoPorPlantaUbtMaquina(filtradas, STATE.rol);
+}
+
+/* ---------- SUPERVISOR ---------- */
+let sheetsCache = [];
+async function renderSupervisor(){
+  sheetsCache = await listSheets();
+  return `<div class="card"><h2>Todas las hojas (solo lectura)</h2>
+    <div class="filters">
+      <input id="filtro_planta" placeholder="Filtrar por planta" oninput="filtrarSupervisor()">
+      <input id="filtro_ubt" placeholder="Filtrar por UBT" oninput="filtrarSupervisor()">
+    </div>
+    <div id="lista_sup"></div>
+  </div>`;
+}
+function filtrarSupervisor(){
+  const pEl = document.getElementById('filtro_planta'), uEl = document.getElementById('filtro_ubt');
+  if(!pEl) return;
+  const planta = pEl.value.toLowerCase(), ubt = uEl.value.toLowerCase();
+  const filtradas = sheetsCache.filter(s => (!planta || (s.planta||'').toLowerCase().includes(planta)) && (!ubt || (s.ubtNo||'').toLowerCase().includes(ubt)));
+  document.getElementById('lista_sup').innerHTML = filtradas.length===0 ? '<div class="empty">Sin hojas.</div>' : renderAgrupadoPorPlantaUbtMaquina(filtradas, 'supervisor');
+}
+
+function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
+  const puedeImprimir = viewerRole==='tecnico' || viewerRole==='supervisor';
+  const porPlanta = {};
+  sheets.forEach(s=>{
+    (porPlanta[s.planta||'—'] ??= {});
+    (porPlanta[s.planta||'—'][s.ubtNo||'—'] ??= {});
+    (porPlanta[s.planta||'—'][s.ubtNo||'—'][s.maquina||'—'] ??= []).push(s);
+  });
+  return Object.keys(porPlanta).sort().map(planta=>{
+    const ubts = porPlanta[planta];
+    const totalPlanta = Object.values(ubts).reduce((a,m)=>a+Object.values(m).reduce((b,arr)=>b+arr.length,0),0);
+    return `<details style="margin-bottom:8px;">
+      <summary style="cursor:pointer;font-weight:700;padding:8px 10px;background:#2f3742;color:#fff;border-radius:6px;">📍 ${escapeHtml(planta)} (${totalPlanta} hoja${totalPlanta!==1?'s':''})</summary>
+      <div style="padding:10px 0 0 14px;">
+        ${Object.keys(ubts).sort().map(ubt=>{
+          const maquinas = ubts[ubt];
+          const totalUbt = Object.values(maquinas).reduce((a,arr)=>a+arr.length,0);
+          return `<details style="margin-bottom:6px;">
+            <summary style="cursor:pointer;font-weight:600;padding:6px 10px;background:#eef1f4;border-radius:6px;">UBT ${escapeHtml(ubt)} (${totalUbt})</summary>
+            <div style="padding:8px 0 0 14px;">
+              ${Object.keys(maquinas).sort().map(maq=>`
+                <details style="margin-bottom:6px;">
+                  <summary style="cursor:pointer;font-size:13px;padding:5px 10px;background:#f7f8f9;border-radius:6px;">⚙️ ${escapeHtml(maq)} (${maquinas[maq].length})</summary>
+                  <div style="padding-top:8px;">${maquinas[maq].map(s=> puedeImprimir ? renderSheetPrintWrap(s,{role:'lectura'}) : `<div class="sheet-print-wrap">${renderSheetVisual(s,{role:'lectura'})}</div>`).join('')}</div>
+                </details>`).join('')}
+            </div>
+          </details>`;
+        }).join('')}
+      </div>
+    </details>`;
+  }).join('');
+}
+
+/* ---------- Imprimir una hoja individual ---------- */
+function imprimirHoja(elId){
+  document.body.classList.add('printing-single');
+  const target = document.getElementById(elId);
+  target.classList.add('print-target');
+  window.print();
+  setTimeout(()=>{ document.body.classList.remove('printing-single'); target.classList.remove('print-target'); }, 500);
+}
+function renderSheetPrintWrap(sheet, opts){
+  const wrapId = 'sw_' + sheet.key.replace(/[^a-z0-9]/gi,'');
+  return `<div class="sheet-print-wrap" id="${wrapId}">
+    ${renderSheetVisual(sheet, opts)}
+    <button class="btn ghost small no-print" style="margin-top:6px;" onclick="imprimirHoja('${wrapId}')">🖨️ Imprimir / Guardar como PDF esta hoja</button>
+  </div>`;
+}
+
+/* ---------- Edición con clave de administrador ---------- */
+let editandoFila = null;
+function pedirClaveEditar(sheetKeyStr, filaId){
+  editandoFila = {sheetKey: sheetKeyStr, filaId};
+  const el = document.getElementById('editpass_'+filaId);
+  if(el) el.style.display = 'flex';
+}
+async function validarClaveEditar(filaId){
+  const val = document.getElementById('editpass_input_'+filaId).value;
+  if(val !== STATE.codes.admin){ showToast('⚠️ Clave de administrador incorrecta'); return; }
+  render_editPanel(filaId);
+}
+async function render_editPanel(filaId){
+  const {sheetKey: sk, filaId: fid} = editandoFila;
+  const sheet = await getSheet(sk);
+  const fila = sheet.filas.find(f=>f.id===fid);
+  const panel = document.getElementById('editpanel_'+filaId);
+  if(!panel || !fila) return;
+  panel.innerHTML = `
+    <div class="row3">
+      <div class="field"><label>Fecha</label><input id="e_fecha" type="date" value="${fila.fecha||''}"></div>
+      <div class="field"><label>Hora Inicio</label><input id="e_hi" type="time" value="${fila.horaInicio||''}"></div>
+      <div class="field"><label>Hora Final</label><input id="e_hf" type="time" value="${fila.horaFinal||''}"></div>
+    </div>
+    <div class="field"><label>Síntomas/Fallas</label><textarea id="e_sintomas">${escapeHtml(fila.sintomas)}</textarea></div>
+    <div class="field"><label>Acciones Correctivas</label><textarea id="e_acciones">${escapeHtml(fila.acciones)}</textarea></div>
+    <div class="field"><label>Material</label><textarea id="e_material">${escapeHtml(fila.material)}</textarea></div>
+    <div class="field"><label>No. Gafete</label><input id="e_gafete" value="${escapeHtml(fila.gafete)}"></div>
+    <button class="btn small" onclick="guardarEdicion('${sk}','${fid}')">Guardar cambios</button>
+  `;
+  panel.style.display = 'block';
+}
+async function guardarEdicion(sk, fid){
+  const sheet = await getSheet(sk);
+  const fila = sheet.filas.find(f=>f.id===fid);
+  fila.fecha = document.getElementById('e_fecha').value;
+  fila.horaInicio = document.getElementById('e_hi').value;
+  fila.horaFinal = document.getElementById('e_hf').value;
+  fila.sintomas = document.getElementById('e_sintomas').value.trim();
+  fila.acciones = document.getElementById('e_acciones').value.trim();
+  fila.material = document.getElementById('e_material').value.trim();
+  fila.gafete = document.getElementById('e_gafete').value.trim();
+  await saveSheet(sk, sheet);
+  showToast('Registro actualizado ✓');
+  render();
+}
+
+/* ---------- Render visual de la hoja ---------- */
+function renderSheetVisual(sheet, opts){
+  if(!sheet) return '<div class="empty">Hoja no encontrada.</div>';
+  const filas = sheet.filas || [];
+  const rowMajor = [0,1,2].map(r => checklistGroups.map(col => col[r] || null));
+  const flat = rowMajor.flat();
+  const chkHtml = flat.map(item=>{
+    if(item===null) return `<span></span>`;
+    if(item==='Otros') return `<span>Otros ☐ ____</span>`;
+    return `<span class="${item===sheet.maquina?'on':'off'}">${item}</span>`;
+  }).join('');
+  const filasHtml = filas.length===0 ? `<tr><td colspan="13" style="color:#999;">Sin registros todavía</td></tr>` :
+    filas.map(f=>{
+      const auditorCell = f.estadoAuditor==='firmado' ? `<span class="firma-ok">${escapeHtml(f.firmaAuditorNombre)}</span>`
+        : (opts.role==='auditor' ? `<button class="firma-btn" onclick="firmarAuditor('${sheet.key}','${f.id}')">Firmar</button>` : 'Pendiente');
+      let apqpCell = 'N/A';
+      if(f.estadoAPQP==='firmado') apqpCell = `<span class="firma-ok">${escapeHtml(f.firmaAPQPNombre)}</span>`;
+      else if(f.estadoAPQP==='pendiente') apqpCell = (opts.role==='apqp' ? `<button class="firma-btn" onclick="firmarApqp('${sheet.key}','${f.id}')">Firmar</button>` : 'Pendiente');
+      return `<tr>
+        <td>${f.fecha||''}</td><td>${escapeHtml(f.gafete)}</td><td>${f.horaInicio||''}</td><td>${f.horaFinal||''}</td>
+        <td class="left">${escapeHtml(f.sintomas)}</td><td class="left">${escapeHtml(f.acciones)}</td><td class="left">${escapeHtml(f.material)}</td>
+        <td>${escapeHtml(f.tecnico)}</td><td>${auditorCell}</td><td>${f.seMovioModulo?'Sí':'No'}</td><td>${f.seVerificoModulo?'Sí':'No'}</td><td>${apqpCell}</td>
+        <td class="no-print">
+          <button class="edit-btn" onclick="pedirClaveEditar('${sheet.key}','${f.id}')">✏️ Editar</button>
+          <div class="pass-inline" id="editpass_${f.id}" style="display:none;">
+            <input type="password" id="editpass_input_${f.id}" placeholder="Clave admin">
+            <button onclick="validarClaveEditar('${f.id}')">OK</button>
+          </div>
+          <div class="edit-panel" id="editpanel_${f.id}" style="display:none;"></div>
+        </td>
+      </tr>`;
+    }).join('');
+  return `<div class="sheet-page">
+      <div class="sheet-head">
+        <div class="sheet-brand">LEAR<small>CORPORATION</small></div>
+        <div class="sheet-title">FORMATO DE VALIDACIÓN DE MANTENIMIENTO</div>
+        <div class="sheet-monthyear">${(sheet.mes||'').toUpperCase()}<br>${sheet.anio||''}</div>
+      </div>
+      <div class="chk-grid">${chkHtml}</div>
+      <div class="sheet-meta"><span><b>Planta:</b> ${escapeHtml(sheet.planta)}</span><span><b>Estación No.:</b> ${escapeHtml(sheet.maquina)}</span><span><b>UBT No.:</b> ${escapeHtml(sheet.ubtNo)}</span><span><b>Página:</b> ${sheet.pagina||1}</span></div>
+      <div style="overflow-x:auto;"><table class="sheet-table"><thead><tr>
+          <th>Fecha</th><th>No. Gafete</th><th>Hora Inicio</th><th>Hora Final</th><th>Síntomas/Fallas</th>
+          <th>Acciones Correctivas</th><th>Material</th><th>Técnico</th><th>Auditor de Calidad</th>
+          <th>Se movió módulo</th><th>Se verificó cuadrante</th><th>APQP</th><th class="no-print">Editar</th>
+        </tr></thead><tbody>${filasHtml}</tbody></table></div>
+    </div>`;
+}
+
+/* ---------- ADMIN ---------- */
+function renderAdminLogin(){
+  return `<div class="wrap"><div class="card">
+    <h2>Acceso de Administrador</h2>
+    <div class="field"><label>Contraseña</label><input id="admin_pass" type="password"></div>
+    <div id="admin_error" style="color:#b00;font-size:12px;margin-bottom:8px;display:none;">Contraseña incorrecta.</div>
+    <button class="btn" onclick="loginAdmin()">Entrar</button>
+  </div></div>`;
+}
+function loginAdmin(){
+  const pass = document.getElementById('admin_pass').value;
+  if(pass !== STATE.codes.admin){ document.getElementById('admin_error').style.display='block'; return; }
+  STATE.adminOk = true; render();
+}
+async function renderAdmin(){
+  const usuarios = await listUsuarios();
+  STATE.plantasCfgDraft = JSON.parse(JSON.stringify(STATE.plantasCfg));
+  return `
+  <div class="card">
+    <h2>Códigos de acceso por rol</h2>
+    ${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`
+      <div class="field"><label>${r.emoji} ${r.label}</label><input id="code_${k}" value="${STATE.codes[k]}"></div>
+    `).join('')}
+    <div class="field"><label>⚙️ Administrador</label><input id="code_admin" value="${STATE.codes.admin}"></div>
+    <button class="btn secondary" onclick="guardarCodigos()">Guardar códigos</button>
+  </div>
+  <div class="card">
+    <h2>UBTs por planta</h2>
+    <p style="font-size:12.5px;color:var(--muted);">Cada fila es un UBT. Usa ↑ ↓ para moverlo si necesitas insertarlo entre otros dos.</p>
+    ${PLANTA_NOMBRES.map(p=>`
+      <details class="planta-block" open>
+        <summary style="cursor:pointer;font-weight:700;font-size:13.5px;">${p}${p==='Partes de Servicio'?' (además de estos, ya incluye automático todas las de Planta 1/2/3)':''}</summary>
+        <div id="plantalist_${slug(p)}" style="margin-top:10px;">${renderPlantaListEditor(p)}</div>
+        <button class="btn ghost small" style="margin-top:8px;" onclick="agregarUbtPlanta('${p.replace(/'/g,"\\'")}')">+ Agregar UBT</button>
+      </details>`).join('')}
+    <button class="btn secondary" onclick="guardarPlantas()">Guardar UBTs</button>
+  </div>
+  <div class="card">
+    <h2>Usuarios registrados (${usuarios.length})</h2>
+    ${usuarios.length===0 ? '<div class="empty">Nadie se ha registrado todavía.</div>' : `
+    <table class="admin-tbl"><thead><tr><th>Nombre</th><th>Rol</th><th>Gafete</th><th>UBTs asignados</th><th></th></tr></thead>
+    <tbody>${usuarios.map(u=>{
+      const ubtsTxt = u.ubtsPorPlanta ? Object.entries(u.ubtsPorPlanta).filter(([,v])=>v&&v.length).map(([p,v])=>`${p}: ${v.join(', ')}`).join(' · ') : '';
+      const uid = slug(u.nombre);
+      return `<tr>
+        <td><input id="au_nombre_${uid}" value="${escapeHtml(u.nombre)}" style="width:120px;padding:4px;font-size:12px;" disabled></td>
+        <td><select id="au_rol_${uid}" style="font-size:12px;padding:4px;" disabled>${Object.entries(ROLES).filter(([k])=>k!=='admin').map(([k,r])=>`<option value="${k}" ${u.rol===k?'selected':''}>${r.label}</option>`).join('')}</select></td>
+        <td><input id="au_gafete_${uid}" value="${escapeHtml(u.gafete)}" style="width:90px;padding:4px;font-size:12px;" disabled></td>
+        <td>${ubtsTxt||'—'}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn ghost small" id="au_editbtn_${uid}" onclick="toggleEditUsuario('${uid}','${u.nombre.replace(/'/g,"\\'")}')">✏️ Editar</button>
+          <button class="btn ghost small" style="color:#a13636;" onclick="confirmarBorrarUsuario(this,'${u.nombre.replace(/'/g,"\\'")}')">🗑 Borrar</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+    </table>`}
+  </div>
+  <div class="card">
+    <h2>Códigos QR — automático para todos los registrados</h2>
+    <div class="field"><label>URL publicada de este artifact (pégala aquí una vez que lo publiques)</label><input id="base_url" placeholder="https://claude.ai/public/artifacts/..."></div>
+    <button class="btn secondary" onclick="renderQRCodes()">Generar / actualizar códigos QR</button>
+  </div>
+  <div class="card"><div id="qr_output" class="qr-grid"></div></div>`;
+}
+async function toggleEditUsuario(uid, nombre){
+  const btn = document.getElementById('au_editbtn_'+uid);
+  const nombreEl = document.getElementById('au_nombre_'+uid);
+  const rolEl = document.getElementById('au_rol_'+uid);
+  const gafeteEl = document.getElementById('au_gafete_'+uid);
+  const editing = btn.textContent.includes('Guardar');
+  if(!editing){
+    nombreEl.disabled = false; rolEl.disabled = false; gafeteEl.disabled = false;
+    btn.textContent = '💾 Guardar';
+  } else {
+    const nuevoNombre = nombreEl.value.trim();
+    const nuevoRol = rolEl.value;
+    const nuevoGafete = gafeteEl.value.trim();
+    const usuarioViejo = await getUsuario(nombre);
+    const actualizado = { ...usuarioViejo, nombre: nuevoNombre, rol: nuevoRol, gafete: nuevoGafete };
+    if(slug(nuevoNombre) !== slug(nombre)){
+      await deleteUsuario(nombre);
+    }
+    await saveUsuario(actualizado);
+    showToast('Usuario actualizado ✓');
+    render();
+  }
+}
+function confirmarBorrarUsuario(btn, nombre){
+  if(btn.dataset.confirm==='1'){ eliminarUsuario(nombre); return; }
+  btn.dataset.confirm = '1';
+  btn.textContent = '¿Seguro? Toca de nuevo';
+  setTimeout(()=>{ btn.dataset.confirm=''; btn.textContent='🗑 Borrar'; }, 3000);
+}
+async function eliminarUsuario(nombre){
+  await deleteUsuario(nombre);
+  showToast('Usuario eliminado ✓');
+  render();
+}
+
+async function guardarCodigos(){
+  const nuevos = {};
+  Object.keys(ROLES).forEach(k=>{ const el = document.getElementById('code_'+k); if(el) nuevos[k] = el.value; });
+  STATE.codes = nuevos;
+  await saveConfig(nuevos);
+  showToast('Códigos actualizados ✓');
+}
+function renderPlantaListEditor(planta){
+  const arr = STATE.plantasCfgDraft[planta] || [];
+  const key = slug(planta);
+  return arr.map((u,i)=>`
+    <div class="ubt-row" data-idx="${i}">
+      <input class="ubt-row-input" data-planta="${escapeHtml(planta)}" data-idx="${i}" value="${escapeHtml(u)}">
+      <button type="button" onclick="moverUbtPlanta('${planta.replace(/'/g,"\\'")}',${i},-1)">↑</button>
+      <button type="button" onclick="moverUbtPlanta('${planta.replace(/'/g,"\\'")}',${i},1)">↓</button>
+      <button type="button" onclick="quitarUbtPlanta('${planta.replace(/'/g,"\\'")}',${i})">✕</button>
+    </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">Sin UBTs todavía.</div>';
+}
+function syncPlantaFromDOM(planta){
+  const key = slug(planta);
+  const inputs = document.querySelectorAll(`#plantalist_${key} .ubt-row-input`);
+  STATE.plantasCfgDraft[planta] = [...inputs].map(i=>i.value.trim());
+}
+function refrescarPlantaEditor(planta){
+  document.getElementById('plantalist_'+slug(planta)).innerHTML = renderPlantaListEditor(planta);
+}
+function agregarUbtPlanta(planta){
+  syncPlantaFromDOM(planta);
+  STATE.plantasCfgDraft[planta].push('');
+  refrescarPlantaEditor(planta);
+}
+function quitarUbtPlanta(planta, idx){
+  syncPlantaFromDOM(planta);
+  STATE.plantasCfgDraft[planta].splice(idx,1);
+  refrescarPlantaEditor(planta);
+}
+function moverUbtPlanta(planta, idx, dir){
+  syncPlantaFromDOM(planta);
+  const arr = STATE.plantasCfgDraft[planta];
+  const j = idx+dir;
+  if(j<0 || j>=arr.length) return;
+  [arr[idx],arr[j]] = [arr[j],arr[idx]];
+  refrescarPlantaEditor(planta);
+}
+async function guardarPlantas(){
+  const nuevo = {};
+  PLANTA_NOMBRES.forEach(p=>{ syncPlantaFromDOM(p); nuevo[p] = STATE.plantasCfgDraft[p].filter(Boolean); });
+  STATE.plantasCfg = nuevo;
+  STATE.plantasCfgDraft = JSON.parse(JSON.stringify(nuevo));
+  await savePlantasConfig(nuevo);
+  showToast('UBTs actualizados ✓');
+  render();
+}
+async function renderQRCodes(){
+  const baseInput = document.getElementById('base_url'), output = document.getElementById('qr_output');
+  if(!baseInput || !output) return;
+  const base = baseInput.value.trim();
+  output.innerHTML = '';
+  if(!base){ output.innerHTML = '<div class="empty">Pega arriba la URL publicada del artifact para generar los QR.</div>'; return; }
+  const usuarios = await listUsuarios();
+  if(usuarios.length===0){ output.innerHTML = '<div class="empty">Todavía nadie se ha registrado.</div>'; return; }
+  usuarios.forEach(u=>{
+    const url = base + `?rol=${encodeURIComponent(u.rol)}&nombre=${encodeURIComponent(u.nombre)}`;
+    const box = document.createElement('div'); box.className='qr-box';
+    const qrDiv = document.createElement('div'); box.appendChild(qrDiv);
+    const label = document.createElement('div'); label.className='label';
+    label.textContent = `${ROLES[u.rol]?.emoji||''} ${u.nombre} (${ROLES[u.rol]?.label||u.rol})`;
+    box.appendChild(label); output.appendChild(box);
+    new QRCode(qrDiv, { text: url, width: 130, height: 130 });
+  });
+}
+
+/* ---------- Registro del Service Worker (necesario para instalación y push) ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('Service Worker registrado:', reg.scope))
+      .catch(err => console.warn('No se pudo registrar el Service Worker:', err));
+  });
+}
+
+/* ---------- Init ---------- */
+(function init(){
+  const p = getParams();
+  if(p.rol && ROLES[p.rol]){ STATE.rol = p.rol; STATE.nombre = p.nombre || ''; }
+  render();
+})();
+</script>
+</body>
+</html>
