@@ -163,7 +163,8 @@
   .pie-marca{text-align:center;font-size:10.5px;color:#9aa1a9;opacity:.65;padding:14px 10px 20px;letter-spacing:.3px;user-select:none;}
   .pie-marca b{font-weight:700;color:#8a9099;}
   /* --- Hoja TPM (formato de piso) --- */
-  .tpm-hoja{background:#fff;border:1px solid #333;padding:12px 14px;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;overflow-x:auto;}
+  .tpm-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;}
+  .tpm-hoja{background:#fff;border:1px solid #333;padding:14px 16px;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:816px;min-height:1056px;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.10);}
   .tpm-rev{text-align:right;font-size:9px;margin-bottom:10px;}
   .tpm-cabecera{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:end;gap:8px;}
   .tpm-planta{font-size:12px;font-weight:800;}
@@ -177,22 +178,24 @@
   table.tpm-table{width:100%;border-collapse:collapse;table-layout:fixed;}
   table.tpm-table th, table.tpm-table td{border:1px solid #333;font-size:8px;text-align:center;vertical-align:middle;padding:1px;}
   table.tpm-table th{background:#f2f2f2;font-weight:700;}
-  .tpm-sub{width:62px;font-size:8.5px;font-weight:600;}
-  .tpm-ayuda{width:86px;}
-  .tpm-ayuda img{max-width:82px;max-height:52px;display:block;margin:2px auto;}
-  .tpm-sinfoto{font-size:16px;opacity:.28;}
-  .tpm-act{width:150px;font-size:8px;line-height:1.25;padding:3px 4px !important;}
-  .tpm-turno{width:20px;font-weight:700;}
+  .tpm-sub{width:74px;font-size:8.5px;font-weight:600;}
+  .tpm-ayuda{width:96px;}
+  .tpm-ayuda img{max-width:90px;max-height:66px;display:block;margin:3px auto;}
+  .tpm-sinfoto{font-size:18px;opacity:.25;}
+  .tpm-act{width:172px;font-size:8px;line-height:1.3;padding:4px 5px !important;}
+  .tpm-turno{width:22px;font-weight:700;}
   .tpm-sem{font-size:8px;}
-  .tpm-dia{width:15px;font-size:7.5px;}
-  .tpm-cel{height:22px;font-size:10px;font-weight:800;color:#146030;}
-  .tpm-vacio{background:#f4f5f6;}
+  .tpm-dia{width:17px;font-size:7.5px;}
+  .tpm-cel{height:37px;font-size:11px;font-weight:800;color:#146030;}
+  .tpm-guion{color:#b6bcc2;font-weight:400;}
+  .tpm-vacio{background:#f7f8f9;}
   .tpm-hoy{background:#fff8dc;}
   .tpm-chk-cel{width:13px;height:13px;margin:0;cursor:pointer;}
   .tpm-nota{font-size:8.5px;margin-top:5px;}
   .tpm-nota b{font-weight:800;}
-  .tpm-coment{font-size:8.5px;margin-top:8px;display:flex;align-items:flex-end;gap:6px;}
-  .tpm-linea{flex:1;border-bottom:1px solid #333;height:12px;}
+  .tpm-coment{font-size:8.5px;margin-top:10px;}
+  .tpm-coment-txt{border-bottom:1px solid #333;min-height:15px;padding:1px 3px;font-size:9px;white-space:pre-wrap;}
+  .tpm-linea{border-bottom:1px solid #333;height:15px;margin-top:2px;}
   .tpm-firmas{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px;}
   .tpm-firma{text-align:center;}
   .tpm-firma-cont{min-height:34px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;}
@@ -201,7 +204,7 @@
   .tpm-firma-fec{font-size:7.5px;color:#555;}
   .tpm-firma-linea{border-top:1px solid #333;margin:2px 6px 3px;}
   .tpm-firma-tit{font-size:8px;}
-  @media(max-width:760px){ .tpm-hoja{padding:8px;} table.tpm-table{min-width:900px;} }
+  @media(max-width:900px){ .tpm-hoja{transform-origin:top left;} }
   .no-print{}
   #barra_version{position:sticky;top:0;z-index:61;background:#0f3d5c;color:#fff;text-align:center;padding:9px 12px;font-size:12.5px;font-weight:700;line-height:1.35;}
   #barra_version button{margin-left:8px;background:#fff;color:#0f3d5c;border:none;border-radius:7px;padding:5px 12px;font-weight:800;font-size:12px;cursor:pointer;}
@@ -244,10 +247,13 @@ const MAX_FILAS_POR_HOJA = 7;
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.5.1 = TPM: hoja en vertical tamaño carta, guiones en días no llenados, comentarios
+           que llena el operador, ayudas visuales con foto y acceso para mantenimiento,
+           supervisores, auditor, APQP y líder
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.5.1';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -735,7 +741,11 @@ async function render(){
     iniciarAutoRefrescoFoco();
     return;
   }
-  if(STATE.vista === 'tpm' && ['produccion','auditor','supervisor','admin'].includes(STATE.rol)){
+  if(STATE.vista === 'tpm_imgs' && ['admin','supervisor'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${renderImagenesTpm()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'tpm' && ['produccion','auditor','supervisor','tecnico','apqp','admin'].includes(STATE.rol)){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVistaTpm()}</div>`;
     return;
   }
@@ -920,6 +930,7 @@ function renderMenuInicio(){
     T('gris','📢','Reportar','Avisar al supervisor',"abrirVista('reportar')");
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
     T('','👁️','Ver correctivos','Solo lectura','verCorrectivos()');
+    T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='produccion'){
@@ -933,7 +944,7 @@ function renderMenuInicio(){
     T('rojo wide','👁️','Ver correctivos','Hojas de mis líneas','verCorrectivos()');
     T('','📋','Mis UBTs','Líneas asignadas','editarUbts()');
     T('','🏠','Mi panel','Pendientes de firma','irAPanel()');
-    if(rol==='auditor') T('azul','🗓️','Hoja TPM','Revisar y firmar el mes','abrirTpm()');
+    T('azul','🗓️','Hoja TPM',rol==='auditor'?'Revisar y firmar el mes':'Ver e imprimir','abrirTpm()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='supervisor'){
@@ -941,10 +952,14 @@ function renderMenuInicio(){
     T('ambar','📬','Buzón','Reportes recibidos',"abrirVista('buzon')");
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
     T('','👁️','Ver correctivos','Todas las plantas','verCorrectivos()');
+    T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
+    T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
   else if(rol==='admin'){
     T('rojo wide','⚙️','Panel de administración','Usuarios, plantas, turnos','irAPanel()');
     T('azul','📊','Análisis','Reportes generales',"abrirVista('analisis')");
+    T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
+    T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
 
   if(puedeVerHistorialFocos()) T('azul wide','📑','Registros de solicitudes','Veces, horas y tiempo de reparación',"abrirVista('historial')");
@@ -1856,9 +1871,15 @@ async function renderVistaTpm(opts){
 
   /* UBTs y máquinas disponibles según el rol */
   let ubtsDisp;
-  if(esOperador) ubtsDisp = [STATE.ubtElegida].filter(Boolean);
-  else if(STATE.rol === 'produccion') ubtsDisp = misUbtsProd();
-  else ubtsDisp = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+  if(esOperador){
+    ubtsDisp = [STATE.ubtElegida].filter(Boolean);
+  } else if(STATE.rol === 'produccion' || STATE.rol === 'auditor' || STATE.rol === 'apqp'){
+    /* Líder, Supervisor de Producción, Multifuncional, Auditor y APQP: sus líneas asignadas */
+    ubtsDisp = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+  } else {
+    /* Mantenimiento, Supervisor de Mantenimiento y Admin: todas las líneas de la planta */
+    ubtsDisp = ubtsDeLaPlanta(STATE.plantasCfg || {}, planta);
+  }
 
   const volver = opts.embed ? '' : `<div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>`;
 
@@ -1891,8 +1912,10 @@ async function renderVistaTpm(opts){
   const marcas = {};
   regs.forEach(r => { marcas[`${r.fecha}|${letraTurno(r.turno)}`] = r; });
   const claveF = claveFirmasTpm(planta, sel.ubt, sel.maquina, sel.anio, sel.mes);
-  const firmas = await getFirmasTpm(claveF);
-  tpmCtx = { planta, ubt:sel.ubt, maquina:sel.maquina, anio:sel.anio, mes:sel.mes, marcas, firmas, claveF };
+  const guardado = await getFirmasTpm(claveF);
+  const imgs = await getImagenesTpm(sel.maquina);
+  tpmCtx = { planta, ubt:sel.ubt, maquina:sel.maquina, anio:sel.anio, mes:sel.mes,
+             marcas, firmas:guardado, comentarios: guardado.comentarios || '', imgs, claveF };
 
   /* Quién marca hoy */
   if(!tpmLlenado){
@@ -1913,11 +1936,21 @@ async function renderVistaTpm(opts){
 
   const barraLlenado = tpmPuedeLlenar() ? renderBarraLlenadoTpm(esOperador) : '';
 
+  const cajaComentarios = tpmPuedeLlenar() ? `
+    <div class="card no-print">
+      <h2>📝 Comentarios de la hoja</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Anota aquí cualquier condición anormal de la máquina. Se imprime junto con la hoja.</p>
+      <textarea id="tpm_coment_input" rows="3" placeholder="Escribe aquí...">${escapeHtml(tpmCtx.comentarios||'')}</textarea>
+      <button class="btn small secondary" onclick="guardarComentariosTpm()">Guardar comentarios</button>
+      <span id="tpm_coment_estado" style="font-size:12.5px;color:var(--muted);margin-left:8px;"></span>
+    </div>` : '';
+
   return `
   ${volver}
   ${selectorMes}
   ${barraLlenado}
-  <div id="tpm_hoja">${renderHojaTpm()}</div>`;
+  <div class="tpm-scroll"><div id="tpm_hoja">${renderHojaTpm()}</div></div>
+  ${cajaComentarios}`;
 }
 
 function renderBarraLlenadoTpm(esOperador){
@@ -1969,7 +2002,8 @@ function renderHojaTpm(){
   const cuerpo = TPM_ACTIVIDADES.map(a=>{
     return letras.map((letra,idx)=>{
       const celdas = semanas.map(sem => sem.map(fecha=>{
-        if(!fecha) return `<td class="tpm-cel tpm-vacio"></td>`;
+        /* Día que no existe en el mes (semana que empezó antes o terminó después) */
+        if(!fecha) return `<td class="tpm-cel tpm-vacio"><span class="tpm-guion">–</span></td>`;
         const reg = c.marcas[`${fecha}|${letra}`];
         const marcado = !!(reg && reg.actividades && reg.actividades[a.id]);
         const esHoy = fecha === hoy;
@@ -1977,12 +2011,15 @@ function renderHojaTpm(){
         if(editable){
           return `<td class="tpm-cel tpm-hoy"><input type="checkbox" class="tpm-chk-cel" data-act="${a.id}" ${marcado?'checked':''} onchange="marcarCeldaTpm()"></td>`;
         }
-        return `<td class="tpm-cel ${esHoy?'tpm-hoy':''}">${marcado?'✔':''}</td>`;
+        if(marcado) return `<td class="tpm-cel ${esHoy?'tpm-hoy':''}">✔</td>`;
+        /* Día que ya pasó y nadie lo llenó: queda con guion, como en el papel */
+        if(fecha < hoy) return `<td class="tpm-cel"><span class="tpm-guion">–</span></td>`;
+        return `<td class="tpm-cel ${esHoy?'tpm-hoy':''}"></td>`;
       }).join('')).join('');
       if(idx === 0){
         return `<tr>
           <td class="tpm-sub" rowspan="${letras.length}">${a.sub}</td>
-          <td class="tpm-ayuda" rowspan="${letras.length}">${a.img?`<img src="${a.img}" alt="">`:'<span class="tpm-sinfoto">📷</span>'}</td>
+          <td class="tpm-ayuda" rowspan="${letras.length}">${(c.imgs&&c.imgs[a.id])?`<img src="${c.imgs[a.id]}" alt="">`:'<span class="tpm-sinfoto">📷</span>'}</td>
           <td class="tpm-act" rowspan="${letras.length}">${a.texto}</td>
           <td class="tpm-turno">${letra}</td>${celdas}
         </tr>`;
@@ -2025,7 +2062,10 @@ function renderHojaTpm(){
     </table>
     <div class="tpm-nota"><b>Nota:</b> Cualquier condicion anormal reportala a tu Lider de Grupo o a tu Supervisor.</div>
     <div class="tpm-nota">Usar el reverso de este formato para reportar condiciones anormales de la maquina.</div>
-    <div class="tpm-coment">Comentarios: <span class="tpm-linea"></span></div>
+    <div class="tpm-coment">Comentarios:
+      <div class="tpm-coment-txt" id="tpm_coment_txt">${escapeHtml(c.comentarios||'')}</div>
+      <div class="tpm-linea"></div>
+    </div>
     <div class="tpm-firmas">
       ${bloqueFirmaTpm('auditorA','AUDITOR / Turno A')}
       ${bloqueFirmaTpm('auditorB','AUDITOR / Turno B')}
@@ -2149,6 +2189,111 @@ async function avisarTpmCompleto(reg){
   }catch(e){ console.warn(e); }
 }
 
+/* ---------- Comentarios de la hoja ---------- */
+async function guardarComentariosTpm(){
+  const el = document.getElementById('tpm_coment_input');
+  const est = document.getElementById('tpm_coment_estado');
+  if(!el || !tpmCtx) return;
+  const texto = el.value.trim();
+  try{
+    const guardado = await getFirmasTpm(tpmCtx.claveF);
+    guardado.comentarios = texto;
+    guardado.comentarios_por = STATE.nombre;
+    guardado.comentarios_fecha = nowLabel();
+    await saveFirmasTpm(tpmCtx.claveF, guardado);
+    tpmCtx.comentarios = texto;
+    const vista = document.getElementById('tpm_coment_txt');
+    if(vista) vista.textContent = texto;
+    if(est) est.textContent = '✓ Guardado';
+    showToast('Comentarios guardados ✓');
+  }catch(err){ showToast('⚠️ '+(err.message||err)); }
+}
+
+/* ---------- Imágenes de la columna Ayuda Visual (una juego por máquina) ---------- */
+function claveImagenesTpm(maquina){ return 'tpmimg:' + slug(maquina); }
+async function getImagenesTpm(maquina){
+  try{
+    const r = await sbFetch('config?clave=eq.'+encodeURIComponent(claveImagenesTpm(maquina))+'&select=valor');
+    return (r && r[0]) ? (r[0].valor||{}) : {};
+  }catch(e){ return {}; }
+}
+async function saveImagenesTpm(maquina, valor){
+  await sbFetch('config?on_conflict=clave', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave: claveImagenesTpm(maquina), valor, actualizado_en:new Date().toISOString() })
+  });
+}
+
+let imgsTpmEdit = { maquina:null, datos:{} };
+async function abrirImagenesTpm(){
+  imgsTpmEdit.maquina = imgsTpmEdit.maquina || MAQ_TPM[0];
+  imgsTpmEdit.datos = await getImagenesTpm(imgsTpmEdit.maquina);
+  STATE.vista = 'tpm_imgs';
+  render();
+}
+async function cambiarMaquinaImagenesTpm(){
+  imgsTpmEdit.maquina = document.getElementById('imgtpm_maquina').value;
+  imgsTpmEdit.datos = await getImagenesTpm(imgsTpmEdit.maquina);
+  render();
+}
+function renderImagenesTpm(){
+  return `
+  <div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+  <div class="card">
+    <h2>🖼️ Ayudas visuales del TPM</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Sube la foto de cada actividad. Aparece en la columna "Ayuda Visual" de la hoja y también al imprimir.</p>
+    <div class="field"><label>Máquina</label>
+      <select id="imgtpm_maquina" onchange="cambiarMaquinaImagenesTpm()">
+        ${MAQ_TPM.map(m=>`<option ${m===imgsTpmEdit.maquina?'selected':''}>${escapeHtml(m)}</option>`).join('')}
+      </select>
+    </div>
+    <div style="background:#eef4f8;border-left:4px solid #0f3d5c;border-radius:8px;padding:10px;font-size:12.5px;margin-bottom:12px;">
+      Las 8 actividades son las mismas para las cuatro máquinas. Si las fotos también sirven igual,
+      súbelas una vez y usa el botón de abajo para copiarlas a las demás.
+    </div>
+    ${TPM_ACTIVIDADES.map(a=>`
+      <div style="display:flex;gap:12px;align-items:center;padding:10px;border:1px solid #e2e5e8;border-radius:9px;margin-bottom:8px;">
+        <div style="width:92px;height:64px;background:#f4f5f6;border-radius:6px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;">
+          ${imgsTpmEdit.datos[a.id]?`<img src="${imgsTpmEdit.datos[a.id]}" style="max-width:100%;max-height:100%;">`:'<span style="opacity:.35;font-size:20px;">📷</span>'}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <b style="font-size:13px;">${a.sub}</b>
+          <div style="font-size:11.5px;color:var(--muted);margin:2px 0 6px;">${a.texto}</div>
+          <input type="file" accept="image/*" onchange="subirImagenTpm(this,'${a.id}')" style="font-size:12px;">
+          ${imgsTpmEdit.datos[a.id]?`<button class="btn ghost small" style="margin-left:6px;" onclick="quitarImagenTpm('${a.id}')">Quitar</button>`:''}
+        </div>
+      </div>`).join('')}
+    <button class="btn secondary" onclick="copiarImagenesTpm()">📄 Copiar estas fotos a las otras 3 máquinas</button>
+  </div>`;
+}
+
+async function copiarImagenesTpm(){
+  const otras = MAQ_TPM.filter(m => m !== imgsTpmEdit.maquina);
+  if(!confirm(`Se van a reemplazar las fotos de:\n\n${otras.join('\n')}\n\n¿Continuar?`)) return;
+  try{
+    for(const m of otras) await saveImagenesTpm(m, imgsTpmEdit.datos);
+    showToast('Fotos copiadas a las demás máquinas ✓');
+  }catch(err){ showToast('⚠️ '+(err.message||err)); }
+}
+async function subirImagenTpm(input, actId){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  showToast('Procesando imagen...');
+  try{
+    const b64 = await comprimirImagen(file, 420, 0.72);   /* chica: solo es referencia visual */
+    imgsTpmEdit.datos[actId] = b64;
+    await saveImagenesTpm(imgsTpmEdit.maquina, imgsTpmEdit.datos);
+    showToast('Imagen guardada ✓');
+    render();
+  }catch(err){ showToast('⚠️ '+(err.message||err)); }
+}
+async function quitarImagenTpm(actId){
+  delete imgsTpmEdit.datos[actId];
+  await saveImagenesTpm(imgsTpmEdit.maquina, imgsTpmEdit.datos);
+  showToast('Imagen quitada');
+  render();
+}
+
 /* ---------- Imprimir la hoja ---------- */
 function imprimirTpm(){
   const hoja = document.querySelector('#tpm_hoja .tpm-hoja');
@@ -2159,9 +2304,10 @@ function imprimirTpm(){
   const v = window.open('', '_blank', 'width=1200,height=850');
   if(!v){ showToast('⚠️ El navegador bloqueó la ventana emergente'); return; }
   v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>${estilos}
-    <style>body{background:#fff;margin:0;padding:8px;} .no-print{display:none !important;}
-    @page{size:letter portrait;margin:7mm;}
-    .tpm-hoja{border:none;}
+    <style>body{background:#fff;margin:0;padding:0;} .no-print{display:none !important;}
+    @page{size:letter portrait;margin:8mm;}
+    .tpm-hoja{border:none;box-shadow:none;width:816px;min-height:0;margin:0;
+              transform:scale(.80);transform-origin:top left;}
     .tpm-chk-cel{display:none;}
     </style></head><body>${hoja.outerHTML}</body></html>`);
   v.document.close(); v.focus();
