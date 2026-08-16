@@ -353,23 +353,23 @@ function pintarVersion(){
 }
 
 /* ---------- Actualización de la app ----------
-   El service worker guarda el index.html en el teléfono, por eso algunos
-   equipos se quedaban con una versión vieja. Esto lo detecta y lo limpia. */
+   El navegador guarda el index.html y por eso algunos equipos se quedan
+   con una versión vieja. Esto lo obliga a bajar el archivo otra vez.
+   OJO: no se toca el service worker, para no perder las notificaciones. */
 async function actualizarApp(){
-  showToast('🔄 Buscando versión nueva...');
+  showToast('🔄 Bajando la versión nueva...');
   try{
     if('caches' in window){
       const llaves = await caches.keys();
       await Promise.all(llaves.map(k => caches.delete(k)));
     }
-    if('serviceWorker' in navigator){
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    }
     localStorage.removeItem('ultima_revision_version');
   }catch(e){ console.warn(e); }
-  /* El parámetro obliga al servidor a mandar el archivo otra vez, sin caché */
-  location.replace(location.pathname + '?v=' + Date.now());
+  /* Se conservan los parámetros del enlace (por ejemplo los del QR de una UBT)
+     y se agrega uno nuevo que obliga a GitHub a mandar el archivo otra vez */
+  const p = new URLSearchParams(location.search);
+  p.delete('chk'); p.set('v', String(Date.now()));
+  location.replace(location.pathname + '?' + p.toString());
 }
 
 function mostrarBarraVersion(nueva){
