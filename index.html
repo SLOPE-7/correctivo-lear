@@ -142,21 +142,23 @@
 
   .sheet-print-wrap{margin-bottom:16px;}
   /* --- Hoja de correctivo: copia del formato de papel (carta horizontal) --- */
-  .sheet-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;}
+  .sheet-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding-bottom:8px;max-width:100%;}
+  .sheet-scroll::-webkit-scrollbar{height:9px;}
+  .sheet-scroll::-webkit-scrollbar-thumb{background:#c3c9cf;border-radius:5px;}
+  .card > .sheet-scroll, .sheet-print-wrap > .sheet-scroll{margin:0 -2px;}
   .sheet-page{border:1px solid #333;padding:16px 18px;background:#fff;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:1056px;min-height:816px;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.10);}
   .sheet-head{display:grid;grid-template-columns:210px 1fr 120px;align-items:flex-start;gap:8px;margin-bottom:2px;}
-  .sheet-brand{font-size:22px;font-weight:800;letter-spacing:1px;line-height:1;}
-  .sheet-brand .oval{display:inline-block;border:3px solid #c8102e;color:#c8102e;border-radius:50%;width:22px;height:22px;line-height:16px;text-align:center;font-size:15px;margin-right:5px;vertical-align:-3px;}
-  .sheet-brand small{display:block;font-size:7.5px;letter-spacing:2.6px;font-weight:700;margin-top:1px;}
-  .sheet-brand em{display:block;font-size:6px;letter-spacing:1.6px;font-style:normal;color:#444;}
+  .sheet-brand{padding-top:2px;}
+  .lear-logo{width:180px;height:auto;display:block;}
   .sheet-title{font-size:12.5px;font-weight:800;text-align:center;padding-top:8px;}
   .sheet-monthyear{font-size:15px;font-weight:800;text-align:right;line-height:1.15;}
-  .chk-grid{display:grid;grid-template-columns:repeat(4,1fr) 150px;gap:3px 10px;font-size:10px;margin:8px 0 6px;}
-  .chk-box{display:inline-block;width:22px;height:11px;border:1px solid #333;vertical-align:middle;margin:0 5px;}
+  table.chk-tabla{border-collapse:collapse;margin:6px 0 4px;font-size:10px;width:100%;table-layout:fixed;}
+  table.chk-tabla td{border:none;padding:1px 2px;white-space:nowrap;vertical-align:middle;}
+  table.chk-tabla td.chk-txt{width:11%;}
+  table.chk-tabla td.chk-cas{width:4%;text-align:center;}
+  .chk-box{display:inline-block;width:24px;height:12px;border:1px solid #333;vertical-align:middle;}
   .chk-box.on{background:#333;}
-  .chk-item{display:flex;align-items:center;justify-content:space-between;white-space:nowrap;}
-  .chk-item.izq{justify-content:flex-start;}
-  .chk-linea{display:inline-block;border-bottom:1px solid #333;min-width:70px;}
+  .chk-linea{display:inline-block;border-bottom:1px solid #333;width:78px;height:10px;vertical-align:middle;}
   .sheet-meta{font-size:10.5px;margin:6px 0 8px;display:flex;gap:26px;flex-wrap:wrap;align-items:baseline;}
   .sheet-meta b{font-weight:700;}
   .sheet-meta u{min-width:120px;display:inline-block;}
@@ -178,6 +180,17 @@
   .pie-marca{text-align:center;font-size:10.5px;color:#9aa1a9;opacity:.65;padding:14px 10px 20px;letter-spacing:.3px;user-select:none;}
   .pie-marca b{font-weight:700;color:#8a9099;}
   /* --- Hoja TPM (formato de piso) --- */
+  .ref-sug{border:1px solid #d9dde1;border-radius:9px;margin-top:6px;max-height:230px;overflow-y:auto;background:#fff;}
+  .ref-op{display:flex;align-items:baseline;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid #f0f2f4;font-size:12.5px;}
+  .ref-op:last-child{border-bottom:none;}
+  .ref-op:hover{background:#eef4f8;}
+  .ref-op b{flex:none;}
+  .ref-op span{flex:1;color:var(--muted);font-size:11.5px;min-width:0;word-break:break-word;}
+  .ref-op small{flex:none;color:#0f3d5c;font-weight:700;font-size:11px;}
+  .ref-vacio{padding:9px 10px;font-size:12px;color:var(--muted);}
+  .ref-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;}
+  .ref-chip{background:#eef4f8;border:1px solid #cfe0ea;border-radius:14px;padding:4px 6px 4px 11px;font-size:11.5px;display:inline-flex;align-items:center;gap:6px;}
+  .ref-chip button{background:#0f3d5c;color:#fff;border:none;border-radius:50%;width:17px;height:17px;line-height:1;cursor:pointer;font-size:10px;}
   .ref-item{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border:1px solid #e2e5e8;border-radius:10px;margin-bottom:8px;background:#fff;}
   .ref-veces{flex:none;width:52px;text-align:center;background:#eef4f8;border-radius:8px;padding:7px 4px;}
   .ref-veces b{display:block;font-size:19px;line-height:1;color:#0f3d5c;}
@@ -270,6 +283,9 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.6.1 = material con buscador del catálogo de refacciones y alta de refacción nueva,
+           logo LEAR real, casillas de máquina alineadas, sin tiempo total en la hoja,
+           la hoja ya no se sale del recuadro
    1.6.0 = la hoja de correctivo se rehizo igual al formato físico CPFO500-1085:
            casillas de máquina, No. Código R59C0, Estación No., 9 renglones fijos,
            columnas y notas del papel, impresión a hoja carta horizontal completa
@@ -287,7 +303,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.6.1';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -954,7 +970,7 @@ function barraInicio(){
 }
 function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
 function guardarBorradorRegistro(){
-  const ids = ['f_fecha','f_hi','f_hf','f_gafete','f_sintomas','f_acciones','f_material','f_parte','f_parte_desc','f_turno'];
+  const ids = ['f_fecha','f_hi','f_hf','f_gafete','f_sintomas','f_acciones','f_material','f_turno'];
   const chk = ['f_movio','f_verifico','f_solicitar_apqp','f_extra'];
   const b = {};
   let hayAlgo = false;
@@ -1456,13 +1472,22 @@ async function renderTecnico(){
       <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas" oninput="buscarFallasSimilaresPronto()"></textarea></div>
       <div id="fallas_similares" style="display:none;background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;"></div>
       <div class="field"><label>Acciones Correctivas</label><textarea id="f_acciones"></textarea></div>
-      <div class="field"><label>Material utilizado en modificación</label><textarea id="f_material"></textarea></div>
-      <div class="row2">
-        <div class="field"><label>No. de Parte (refacción)</label>
-          <input id="f_parte" list="lista_partes" placeholder="Ej. 02P201GFS1" autocomplete="off">
-          <datalist id="lista_partes"></datalist>
+      <div class="field">
+        <label>Material utilizado en modificación</label>
+        <input id="f_buscar_ref" placeholder="🔎 Busca una refacción del catálogo..." autocomplete="off"
+               oninput="filtrarRefacciones()" onfocus="filtrarRefacciones()">
+        <div id="ref_sugerencias" class="ref-sug" style="display:none;"></div>
+        <div id="ref_elegidas" class="ref-chips"></div>
+        <textarea id="f_material" placeholder="Se llena solo al elegir refacciones. También puedes escribir aquí."></textarea>
+        <button class="btn ghost small" type="button" onclick="abrirNuevaRefaccion()">➕ Agregar refacción nueva al catálogo</button>
+        <div id="ref_nueva" style="display:none;background:#f7f8f9;border:1px solid #e2e5e8;border-radius:9px;padding:11px;margin-top:8px;">
+          <div class="row2">
+            <div class="field" style="margin-bottom:6px;"><label>No. de parte</label><input id="nr_parte" placeholder="Ej. 02P201GFS1"></div>
+            <div class="field" style="margin-bottom:6px;"><label>Descripción</label><input id="nr_desc" placeholder="Ej. Conector 4 vías"></div>
+          </div>
+          <button class="btn small secondary" type="button" onclick="guardarRefaccionNueva()">Guardar en el catálogo</button>
+          <button class="btn small ghost" type="button" onclick="document.getElementById('ref_nueva').style.display='none'">Cancelar</button>
         </div>
-        <div class="field"><label>Descripción de la refacción</label><input id="f_parte_desc" placeholder="Opcional"></div>
       </div>
       <div class="field">
         <label>📷 Foto de la falla (opcional)</label>
@@ -1529,8 +1554,8 @@ async function agregarFila(){
   const solicitarApqp = document.getElementById('f_solicitar_apqp').checked;
   const hi = document.getElementById('f_hi').value;
   const hf = document.getElementById('f_hf').value;
-  const numeroParte = document.getElementById('f_parte').value.trim();
-  const parteDesc = document.getElementById('f_parte_desc').value.trim();
+  const numeroParte = refaccionesElegidas.map(r=>r.numero_parte).join(', ');
+  const parteDesc = refaccionesElegidas.map(r=>r.descripcion||'').filter(Boolean).join(' · ');
   const fila = {
     id: uid(),
     fecha: document.getElementById('f_fecha').value,
@@ -1559,7 +1584,9 @@ async function agregarFila(){
   try{ await saveSheet(sheetActivaKey, sheet); }
   catch(err){ liberar(); showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
   liberar();
-  if(numeroParte) registrarRefaccion(numeroParte, parteDesc);
+  /* Cada refacción usada suma una vez en el catálogo */
+  for(const r of refaccionesElegidas) registrarRefaccion(r.numero_parte, r.descripcion||'');
+  refaccionesElegidas = [];
   fotoTemp = null; cacheHojasFallas = null;
   STATE.borradorRegistro = null; borrarBorradorLocal();
 
@@ -1600,12 +1627,12 @@ async function renderAuditor(){
   <div class="card"><h2>🔔 Pendientes de tu firma (${pendientesFilas.length})</h2>
     ${pendientesFilas.length===0 ? '<div class="empty">Sin firmas pendientes. ✓</div>' :
       pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> realizó una reparación en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha} — necesita tu firma.</div>`).join('')}
-    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'auditor'})}</div>`).join('')}
+    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'auditor'})}</div></div>`).join('')}
   </div>
   <div class="card"><h2>📋 Todos los correctivos de tus líneas — ${STATE.plantaHoy}</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">UBT asignados: ${misUbts.join(', ')||'—'}</p>
     ${sinPendientes.length===0 ? '<div class="empty">No hay más hojas registradas en tus líneas.</div>' :
-      sinPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'auditor'})}</div>`).join('')}
+      sinPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'auditor'})}</div></div>`).join('')}
   </div>`;
 }
 async function firmarAuditor(sheetKeyStr, filaId){
@@ -1635,12 +1662,12 @@ async function renderApqp(){
   <div class="card"><h2>🔔 Pendientes de tu firma (${pendientesFilas.length})</h2>
     ${pendientesFilas.length===0 ? '<div class="empty">Sin firmas pendientes. ✓</div>' :
       pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> solicitó tu firma en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha}.</div>`).join('')}
-    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'apqp'})}</div>`).join('')}
+    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'apqp'})}</div></div>`).join('')}
   </div>
   <div class="card"><h2>📋 Todos los correctivos de tus líneas — ${STATE.plantaHoy}</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">UBT asignados: ${misUbts.join(', ')||'—'}</p>
     ${sinPendientes.length===0 ? '<div class="empty">No hay más hojas registradas en tus líneas.</div>' :
-      sinPendientes.map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s, {role:'apqp'})}</div>`).join('')}
+      sinPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'apqp'})}</div></div>`).join('')}
   </div>`;
 }
 async function firmarApqp(sheetKeyStr, filaId){
@@ -1687,7 +1714,7 @@ async function renderVistaUbtPublica(){
       Object.keys(porMaquina).sort().map(maq=>`
         <div class="card">
           <h2>⚙️ ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porMaquina[maq].length} hoja/s)</span></h2>
-          ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap sheet-scroll">${renderSheetVisual(s,{role:'lectura', publico:true})}</div>`).join('')}
+          ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura', publico:true})}</div></div>`).join('')}
         </div>`).join('')}
   </div>`;
 }
@@ -3110,7 +3137,7 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
               ${Object.keys(maquinas).sort().map(maq=>`
                 <details style="margin-bottom:6px;">
                   <summary style="cursor:pointer;font-size:13px;padding:5px 10px;background:#f7f8f9;border-radius:6px;">⚙️ ${escapeHtml(maq)} (${maquinas[maq].length})</summary>
-                  <div style="padding-top:8px;">${maquinas[maq].map(s=> puedeImprimir ? renderSheetPrintWrap(s,{role:'lectura'}) : `<div class="sheet-print-wrap sheet-scroll">${renderSheetVisual(s,{role:'lectura'})}</div>`).join('')}</div>
+                  <div style="padding-top:8px;">${maquinas[maq].map(s=> puedeImprimir ? renderSheetPrintWrap(s,{role:'lectura'}) : `<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura'})}</div></div>`).join('')}</div>
                 </details>`).join('')}
             </div>
           </details>`;
@@ -3156,7 +3183,7 @@ function renderSheetPrintWrap(sheet, opts){
   return `<div class="sheet-print-wrap" id="${wrapId}"
       data-maquina="${escapeHtml(sheet.maquina)}" data-ubt="${escapeHtml(sheet.ubtNo)}"
       data-mes="${escapeHtml(sheet.mes)}" data-anio="${escapeHtml(sheet.anio)}">
-    ${renderSheetVisual(sheet, opts)}
+    <div class="sheet-scroll">${renderSheetVisual(sheet, opts)}</div>
     <div class="no-print" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ghost small" onclick="imprimirHoja('${wrapId}','${sheet.key}')">🖨️ Imprimir esta hoja</button>
       <button class="btn ${yaEsta?'ghost':'secondary'} small" onclick="toggleCola('${sheet.key}')">${yaEsta?'✓ En cola (quitar)':'➕ Agregar a cola'}</button>
@@ -3220,20 +3247,22 @@ function renderSheetVisual(sheet, opts){
   const filas = sheet.filas || [];
 
   /* Casillas de máquina, en el mismo acomodo que el papel: 4 columnas de 3 renglones */
-  const casilla = (item, on, izq) => {
-    if(item === null) return `<span></span>`;
-    if(izq) return `<span class="chk-item"><span>${escapeHtml(item)}</span><span class="chk-box ${on?'on':''}"></span></span>`;
-    return `<span class="chk-item izq"><span class="chk-box ${on?'on':''}"></span><span>${escapeHtml(item)}</span></span>`;
-  };
   const chkHtml = [0,1,2].map(r => {
-    const celdas = checklistGroups.map((col,ci) => {
+    let tds = '';
+    checklistGroups.forEach((col, ci) => {
       const item = col[r] || null;
-      return casilla(item, item===sheet.maquina, ci===0);
-    }).join('');
-    const otros = r===0
-      ? `<span class="chk-item izq"><span class="chk-box"></span><span>Otros</span><span class="chk-linea"></span></span>`
-      : `<span></span>`;
-    return celdas + otros;
+      const on = item && item === sheet.maquina;
+      if(ci === 0){
+        /* Primera columna: el texto va a la izquierda y la casilla a la derecha */
+        tds += `<td class="chk-txt">${item?escapeHtml(item):''}</td><td class="chk-cas">${item?`<span class="chk-box ${on?'on':''}"></span>`:''}</td>`;
+      } else {
+        tds += `<td class="chk-cas">${item?`<span class="chk-box ${on?'on':''}"></span>`:''}</td><td class="chk-txt">${item?escapeHtml(item):''}</td>`;
+      }
+    });
+    tds += r===0
+      ? `<td class="chk-cas"><span class="chk-box"></span></td><td class="chk-txt">Otros <span class="chk-linea"></span></td>`
+      : `<td class="chk-cas"></td><td class="chk-txt"></td>`;
+    return `<tr>${tds}</tr>`;
   }).join('');
 
   const filaVacia = `<tr>${'<td></td>'.repeat(permiteEditar?13:12)}</tr>`;
@@ -3250,7 +3279,7 @@ function renderSheetVisual(sheet, opts){
       <td>${escapeHtml(f.gafete)}</td>
       <td>${escapeHtml(f.horaInicio||'')}</td>
       <td>${escapeHtml(f.horaFinal||'')}</td>
-      <td class="left">${escapeHtml(f.sintomas)}${f.minutosParo?`<br><span style="color:#0f3d5c;font-size:7.5px;">⏱️ ${formatoDuracion(f.minutosParo)}</span>`:''}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:7.5px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td>
+      <td class="left">${escapeHtml(f.sintomas)}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:7.5px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td>
       <td class="left">${escapeHtml(f.acciones)}</td>
       <td class="left">${escapeHtml(f.material)}${f.numeroParte?`<br><span style="font-size:7.5px;"><b>P/N:</b> ${escapeHtml(f.numeroParte)}</span>`:''}</td>
       <td>${f.firmaTecnicoImg?`<img src="${f.firmaTecnicoImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.tecnico)}</span>`:escapeHtml(f.tecnico)}</td>
@@ -3275,11 +3304,20 @@ function renderSheetVisual(sheet, opts){
 
   return `<div class="sheet-page">
       <div class="sheet-head">
-        <div class="sheet-brand"><span class="oval">L</span>LEAR<small>CORPORATION</small><em>ADVANCE RELENTLESSLY</em></div>
+        <div class="sheet-brand">
+          <svg viewBox="0 0 300 84" class="lear-logo" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="30" cy="26" rx="29" ry="24" fill="#e2001a"/>
+            <text x="30" y="39" font-family="Arial Black,Arial,sans-serif" font-size="34" font-weight="900" fill="#fff" text-anchor="middle">L</text>
+            <text x="68" y="41" font-family="Arial Black,Arial,sans-serif" font-size="36" font-weight="900" fill="#111">LEAR</text>
+            <text x="70" y="58" font-family="Arial,sans-serif" font-size="12.5" font-weight="700" fill="#111" letter-spacing="5.2">CORPORATION</text>
+            <line x1="2" y1="66" x2="298" y2="66" stroke="#111" stroke-width="1.6"/>
+            <text x="150" y="80" font-family="Arial,sans-serif" font-size="10.5" font-weight="700" fill="#111" letter-spacing="3.4" text-anchor="middle">ADVANCE RELENTLESSLY</text>
+          </svg>
+        </div>
         <div class="sheet-title">FORMATO DE VALIDACION DE MANTENIMIENTO</div>
         <div class="sheet-monthyear">${escapeHtml((sheet.mes||'').toUpperCase())}<br>${escapeHtml(String(sheet.anio||''))}</div>
       </div>
-      <div class="chk-grid">${chkHtml}</div>
+      <table class="chk-tabla"><tbody>${chkHtml}</tbody></table>
       <div class="sheet-meta">
         <span><b>No. Código</b> <u>R59C0</u></span>
         <span><b>Estación No.</b> <u>${escapeHtml(sheet.maquina||'')}</u></span>
@@ -4281,11 +4319,107 @@ function quitarFoto(inputId, contId){
   const c = document.getElementById(contId); if(c) c.innerHTML='';
 }
 
+/* ---------- Buscador de refacciones dentro del correctivo ---------- */
+let catalogoRefacciones = [];
+let refaccionesElegidas = [];
+
 async function cargarListaPartes(){
-  const dl = document.getElementById('lista_partes');
-  if(!dl) return;
-  const refs = await listRefacciones();
-  dl.innerHTML = refs.map(r=>`<option value="${escapeHtml(r.numero_parte)}">${escapeHtml(r.descripcion||'')}</option>`).join('');
+  catalogoRefacciones = await listRefacciones();
+  pintarRefaccionesElegidas();
+}
+
+function filtrarRefacciones(){
+  const inp = document.getElementById('f_buscar_ref');
+  const cont = document.getElementById('ref_sugerencias');
+  if(!inp || !cont) return;
+  const txt = inp.value.trim().toLowerCase();
+  const yaPuestas = refaccionesElegidas.map(r=>r.numero_parte);
+  let lista = catalogoRefacciones.filter(r => !yaPuestas.includes(r.numero_parte));
+  if(txt){
+    lista = lista.filter(r =>
+      (r.numero_parte||'').toLowerCase().includes(txt) ||
+      (r.descripcion||'').toLowerCase().includes(txt));
+  }
+  lista = lista.slice(0, 8);
+  if(lista.length === 0){
+    cont.innerHTML = `<div class="ref-vacio">Sin coincidencias en el catálogo. Usa "Agregar refacción nueva".</div>`;
+    cont.style.display = 'block';
+    return;
+  }
+  cont.innerHTML = lista.map(r=>`
+    <div class="ref-op" onclick="elegirRefaccion('${escArg(r.numero_parte)}')">
+      <b>${escapeHtml(r.numero_parte)}</b>
+      <span>${escapeHtml(r.descripcion||'Sin descripción')}</span>
+      <small>${r.veces_usada||0}×</small>
+    </div>`).join('');
+  cont.style.display = 'block';
+}
+
+function elegirRefaccion(numeroParte){
+  const r = catalogoRefacciones.find(x=>x.numero_parte===numeroParte);
+  if(!r) return;
+  if(!refaccionesElegidas.some(x=>x.numero_parte===numeroParte)) refaccionesElegidas.push(r);
+  const inp = document.getElementById('f_buscar_ref');
+  if(inp) inp.value = '';
+  const cont = document.getElementById('ref_sugerencias');
+  if(cont) cont.style.display = 'none';
+  pintarRefaccionesElegidas();
+}
+
+function quitarRefaccion(numeroParte){
+  refaccionesElegidas = refaccionesElegidas.filter(x=>x.numero_parte!==numeroParte);
+  pintarRefaccionesElegidas();
+}
+
+/* Lo elegido se escribe en el campo de material, que es lo que sale impreso */
+function pintarRefaccionesElegidas(){
+  const chips = document.getElementById('ref_elegidas');
+  if(chips){
+    chips.innerHTML = refaccionesElegidas.map(r=>`
+      <span class="ref-chip">${escapeHtml(r.numero_parte)}${r.descripcion?` · ${escapeHtml(r.descripcion)}`:''}
+        <button type="button" onclick="quitarRefaccion('${escArg(r.numero_parte)}')">✕</button>
+      </span>`).join('');
+  }
+  const mat = document.getElementById('f_material');
+  if(mat){
+    const texto = refaccionesElegidas.map(r=> r.descripcion ? `${r.descripcion} (${r.numero_parte})` : r.numero_parte).join(', ');
+    const manual = (mat.dataset.manual || '').trim();
+    mat.value = [texto, manual].filter(Boolean).join(manual && texto ? ' · ' : '');
+  }
+}
+
+function abrirNuevaRefaccion(){
+  const c = document.getElementById('ref_nueva');
+  if(!c) return;
+  c.style.display = 'block';
+  const p = document.getElementById('nr_parte');
+  const buscado = document.getElementById('f_buscar_ref');
+  if(p && buscado && buscado.value.trim()) p.value = buscado.value.trim();
+  if(p) p.focus();
+}
+
+async function guardarRefaccionNueva(){
+  const parte = document.getElementById('nr_parte').value.trim();
+  const desc  = document.getElementById('nr_desc').value.trim();
+  if(!parte){ showToast('⚠️ Escribe el número de parte'); return; }
+  if(catalogoRefacciones.some(r=>r.numero_parte===parte)){
+    showToast('Esa refacción ya está en el catálogo');
+    elegirRefaccion(parte);
+    document.getElementById('ref_nueva').style.display = 'none';
+    return;
+  }
+  try{
+    await sbFetch('refacciones?on_conflict=numero_parte', {
+      method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+      body: JSON.stringify({ numero_parte:parte, descripcion:desc, veces_usada:0, ultima_vez:ahoraISO() })
+    });
+  }catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+  catalogoRefacciones = await listRefacciones();
+  document.getElementById('nr_parte').value = '';
+  document.getElementById('nr_desc').value = '';
+  document.getElementById('ref_nueva').style.display = 'none';
+  elegirRefaccion(parte);
+  showToast('✓ Refacción agregada al catálogo');
 }
 
 /* ---------- Refacciones (catálogo de números de parte) ---------- */
