@@ -242,8 +242,8 @@ const checklistGroups = [
 ];
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 /* El mes y el año NUNCA deben ir fijos: se toman del día en que se usa la app */
-function mesActual(){ return MESES[new Date().getMonth()]; }
-function anioActual(){ return String(new Date().getFullYear()); }
+function mesActual(){ return MESES[ahora().getMonth()]; }
+function anioActual(){ return String(ahora().getFullYear()); }
 const MAX_FILAS_POR_HOJA = 7;
 
 /* ---------- Versión de la aplicación ----------
@@ -255,6 +255,8 @@ const MAX_FILAS_POR_HOJA = 7;
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.5.4 = toda la app usa la misma hora corregida (mes, día, saludo, TPM) y se agrega
+           fecha simulada para pruebas desde el modo pruebas
    1.5.3 = panel del administrador: cada botón abre su pantalla (antes todos caían en el
            panel), hoja TPM con selector de planta para admin, mantenimiento y supervisor
    1.5.2 = reloj sincronizado con el servidor (los tiempos ya cuadran entre equipos),
@@ -267,7 +269,7 @@ const MAX_FILAS_POR_HOJA = 7;
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.5.3';
+const APP_VERSION = '1.5.4';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -307,7 +309,7 @@ const EXTRAS_FOCO = ['Pull System','Tablero de Construcción','Socar elevadores'
 function maquinasParaFoco(){ return [...MAQ_COR, ...EXTRAS_FOCO]; }
 
 const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-function diaHoy(){ return DIAS_SEMANA[new Date().getDay()]; }
+function diaHoy(){ return DIAS_SEMANA[ahora().getDay()]; }
 
 const DEFAULT_TURNOS = {
   TA: { nombre:'Turno A', inicio:'06:00', fin:'14:50',
@@ -322,7 +324,7 @@ const DEFAULT_TURNOS = {
 };
 
 function minDelDia(hhmm){ const [h,m]=(hhmm||'00:00').split(':').map(Number); return h*60+m; }
-function ahoraMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes(); }
+function ahoraMin(){ const d=ahora(); return d.getHours()*60+d.getMinutes(); }
 
 /* ¿La hora está dentro del rango? Soporta rangos que cruzan medianoche */
 function dentroDeRango(minAhora, inicio, fin){
@@ -428,7 +430,32 @@ function sincronizarReloj(res){
     if(t) DESFASE_RELOJ = t - Date.now();
   }catch(e){}
 }
-function ahora(){ return new Date(Date.now() + DESFASE_RELOJ); }
+/* Fecha simulada: solo para probar la app en otro día, sin depender del reloj del equipo.
+   Se guarda en este dispositivo y se ve un aviso rojo mientras esté activa. */
+let FECHA_PRUEBA = '';
+try{ FECHA_PRUEBA = localStorage.getItem('fecha_prueba') || ''; }catch(e){}
+function ahora(){
+  const d = new Date(Date.now() + DESFASE_RELOJ);
+  if(FECHA_PRUEBA){
+    const p = FECHA_PRUEBA.split('-').map(Number);
+    if(p.length===3 && !isNaN(p[0])) d.setFullYear(p[0], p[1]-1, p[2]);
+  }
+  return d;
+}
+function ponerFechaPrueba(valor){
+  FECHA_PRUEBA = valor || '';
+  try{
+    if(FECHA_PRUEBA) localStorage.setItem('fecha_prueba', FECHA_PRUEBA);
+    else localStorage.removeItem('fecha_prueba');
+  }catch(e){}
+  showToast(FECHA_PRUEBA ? ('Fecha simulada: ' + FECHA_PRUEBA) : 'Fecha simulada quitada');
+  render();
+}
+function abrirFechaPrueba(){
+  const v = prompt('Fecha simulada para pruebas (AAAA-MM-DD).\nDeja vacío para volver a la fecha real:', FECHA_PRUEBA || todayISO());
+  if(v === null) return;
+  ponerFechaPrueba(v.trim());
+}
 function ahoraMs(){ return Date.now() + DESFASE_RELOJ; }
 function ahoraISO(){ return ahora().toISOString(); }
 function relojDesfasado(){ return Math.abs(DESFASE_RELOJ) > 5*60*1000; }
@@ -865,8 +892,17 @@ function renderTopbar(){
   const rolesConPlanta = ['tecnico','auditor','apqp'];
   const puedeVerTodo = STATE.rol==='supervisor' || esAuditorTipo || (STATE.rol==='tecnico' && STATE.ubtElegida);
   const notifOn = pushDisponible() && Notification.permission === 'granted';
-  const avisoPruebas = STATE.modoPruebas ? '<div style="background:#c77700;color:#fff;text-align:center;padding:5px;font-size:11.5px;font-weight:700;" class="no-print">🧪 MODO PRUEBAS — jornadas desactivadas</div>' : '';
-  return avisoPruebas + `<div class="topbar no-print">
+  const avisoPruebas = STATE.modoPruebas
+    ? `<div style="background:#c77700;color:#fff;text-align:center;padding:5px;font-size:11.5px;font-weight:700;" class="no-print">
+        🧪 MODO PRUEBAS — jornadas desactivadas
+        <button onclick="abrirFechaPrueba()" style="margin-left:8px;background:#fff;color:#c77700;border:none;border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px;cursor:pointer;">📅 Fecha simulada</button>
+      </div>` : '';
+  const avisoFecha = FECHA_PRUEBA
+    ? `<div style="background:#a13636;color:#fff;text-align:center;padding:5px;font-size:11.5px;font-weight:700;" class="no-print">
+        ⚠️ Trabajando con FECHA SIMULADA ${escapeHtml(FECHA_PRUEBA)} — lo que guardes queda con esa fecha
+        <button onclick="ponerFechaPrueba('')" style="margin-left:8px;background:#fff;color:#a13636;border:none;border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px;cursor:pointer;">Quitar</button>
+      </div>` : '';
+  return avisoPruebas + avisoFecha + `<div class="topbar no-print">
     <div class="tb-left">
       <span class="tb-logo">🔧</span>
       <div>
@@ -958,7 +994,7 @@ function irAPanel(){
   render();
 }
 function saludoHora(){
-  const h = new Date().getHours();
+  const h = ahora().getHours();
   if(h < 12) return 'Buenos días';
   if(h < 19) return 'Buenas tardes';
   return 'Buenas noches';
@@ -1974,8 +2010,8 @@ async function renderVistaTpm(opts){
   const maqOperador = STATE.usuario?.maquina || '';
   if(esOperador) sel.maquina = maqOperador;
   if(!MAQ_TPM.includes(sel.maquina)) sel.maquina = esOperador ? maqOperador : MAQ_TPM[0];
-  if(sel.mes === undefined || sel.mes === null) sel.mes = new Date().getMonth();
-  if(!sel.anio) sel.anio = new Date().getFullYear();
+  if(sel.mes === undefined || sel.mes === null) sel.mes = ahora().getMonth();
+  if(!sel.anio) sel.anio = ahora().getFullYear();
   STATE.tpmSel = sel;
 
   /* El operador solo hace TPM si su máquina es de las que lo llevan */
@@ -2037,7 +2073,7 @@ async function renderVistaTpm(opts){
 }
 
 function renderBarraLlenadoTpm(esOperador){
-  const hoy = new Date();
+  const hoy = ahora();
   const nombreDia = DIAS_SEMANA[hoy.getDay()];
   const finDeSemana = hoy.getDay()===0 || hoy.getDay()===6;
   if(finDeSemana){
@@ -2047,7 +2083,7 @@ function renderBarraLlenadoTpm(esOperador){
   }
   return `<div class="card no-print" style="background:#fff7e6;border-color:#f0c674;">
     <div style="font-size:13px;margin-bottom:8px;">
-      ✍️ Estás marcando la columna de <b>hoy ${nombreDia} ${new Date().getDate()}</b>.
+      ✍️ Estás marcando la columna de <b>hoy ${nombreDia} ${hoy.getDate()}</b>.
       Los demás días quedan bloqueados: cada día solo se puede llenar el que corresponde.
     </div>
     ${esOperador ? `<div style="font-size:12.5px;color:var(--muted);">Turno <b>${tpmLlenado.turno}</b> · Operador <b>${escapeHtml(STATE.nombre)}</b></div>` : `
