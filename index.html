@@ -146,7 +146,7 @@
   .sheet-scroll::-webkit-scrollbar{height:9px;}
   .sheet-scroll::-webkit-scrollbar-thumb{background:#c3c9cf;border-radius:5px;}
   .card > .sheet-scroll, .sheet-print-wrap > .sheet-scroll{margin:0 -2px;}
-  .sheet-page{border:1px solid #333;padding:16px 18px;background:#fff;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:1056px;min-height:816px;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.10);}
+  .sheet-page{border:1px solid #333;padding:16px 18px;background:#fff;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:1056px;min-height:816px;margin:0;box-shadow:0 2px 10px rgba(0,0,0,.10);}
   .sheet-head{display:grid;grid-template-columns:210px 1fr 120px;align-items:flex-start;gap:8px;margin-bottom:2px;}
   .sheet-brand{padding-top:2px;}
   .lear-logo{width:180px;height:auto;display:block;}
@@ -168,9 +168,14 @@
   table.sheet-table th.azul{color:#0f38b0;font-size:7.5px;}
   table.sheet-table td.left{text-align:left;font-size:8.5px;line-height:1.25;}
   table.sheet-table tbody tr{height:52px;}
-  .col-fecha{width:52px;} .col-gafete{width:52px;} .col-hora{width:44px;}
-  .col-sint{width:190px;} .col-acc{width:190px;} .col-mat{width:140px;}
-  .col-firma{width:80px;} .col-si{width:56px;} .col-edit{width:70px;}
+  .col-fecha{width:5.5%;} .col-gafete{width:5.5%;} .col-hora{width:4.5%;}
+  .col-sint{width:17%;} .col-acc{width:17%;} .col-mat{width:12.5%;}
+  .col-firma{width:8%;} .col-si{width:5.5%;} .col-apqp{width:6.5%;}
+  /* Con la columna Editar (solo pantalla) todo se encoge un poco */
+  .con-editar .col-fecha{width:5%;} .con-editar .col-gafete{width:5%;} .con-editar .col-hora{width:4%;}
+  .con-editar .col-sint{width:16%;} .con-editar .col-acc{width:16%;} .con-editar .col-mat{width:11.5%;}
+  .con-editar .col-firma{width:7.5%;} .con-editar .col-si{width:5%;} .con-editar .col-apqp{width:6%;}
+  .col-edit{width:6.5%;}
   .sheet-pie{margin-top:8px;display:grid;grid-template-columns:1fr 130px;gap:8px;font-size:8px;line-height:1.3;}
   .sheet-pie b{font-weight:800;}
   .sheet-cod{text-align:right;font-size:8px;}
@@ -200,7 +205,7 @@
   .ref-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;word-break:break-word;}
   .ref-fecha{font-size:11px;color:#9aa1a9;margin-top:4px;}
   .tpm-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;}
-  .tpm-hoja{background:#fff;border:1px solid #333;padding:14px 16px;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:816px;min-height:1056px;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.10);}
+  .tpm-hoja{background:#fff;border:1px solid #333;padding:14px 16px;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:816px;min-height:1056px;margin:0;box-shadow:0 2px 10px rgba(0,0,0,.10);}
   .tpm-rev{text-align:right;font-size:9px;margin-bottom:10px;}
   .tpm-cabecera{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:end;gap:8px;}
   .tpm-planta{font-size:12px;font-weight:800;}
@@ -283,6 +288,8 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.6.2 = la hoja ya no se recorta en pantalla, se imprime al ancho de la página,
+           casilla "Otros" ya no aparece doble, la foto quedó solo en Reportar
    1.6.1 = material con buscador del catálogo de refacciones y alta de refacción nueva,
            logo LEAR real, casillas de máquina alineadas, sin tiempo total en la hoja,
            la hoja ya no se sale del recuadro
@@ -303,7 +310,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.6.1';
+const APP_VERSION = '1.6.2';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -977,7 +984,6 @@ function guardarBorradorRegistro(){
   ids.forEach(id=>{ const el=document.getElementById(id); if(el){ b[id]=el.value; if(['f_sintomas','f_acciones','f_material'].includes(id) && el.value.trim()) hayAlgo=true; } });
   chk.forEach(id=>{ const el=document.getElementById(id); if(el) b[id]=el.checked; });
   if(hayAlgo){
-    b.__foto = fotoTemp || '';
     STATE.borradorRegistro = b;
     /* La copia del dispositivo va sin la foto: ocupa mucho y llena el almacenamiento */
     const sinFoto = { ...b }; delete sinFoto.__foto;
@@ -993,12 +999,6 @@ function restaurarBorradorRegistro(){
     if(!el) return;
     if(el.type === 'checkbox') el.checked = !!val; else el.value = val;
   });
-  if(b.__foto){
-    fotoTemp = b.__foto;
-    const c = document.getElementById('prev_foto');
-    if(c) c.innerHTML = `<img src="${b.__foto}" style="max-width:200px;border-radius:8px;border:1px solid #ddd;">
-      <button class="btn ghost small" style="margin-left:8px;" onclick="quitarFoto('f_foto','prev_foto')">✖ Quitar</button>`;
-  }
   validarTiempos();
   showToast('✓ Se recuperó lo que tenías escrito');
   STATE.borradorRegistro = null;
@@ -1199,10 +1199,12 @@ function imprimirCola(){
   if(!ventana){ showToast('⚠️ El navegador bloqueó la ventana emergente'); return; }
   ventana.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>${estilos}
     <style>body{background:#fff;margin:0;padding:0;} .no-print{display:none !important;}
-    @page{size:letter landscape;margin:5mm;}
-    html,body{width:100%;}
-    .sheet-page{border:none;box-shadow:none;width:1056px;min-height:790px;margin:0;padding:0;
-                page-break-inside:avoid;transform:scale(.945);transform-origin:top left;}</style></head><body>${hojas}</body></html>`);
+    @page{size:letter landscape;margin:6mm;}
+    html,body{width:100%;margin:0;padding:0;}
+    .sheet-page{border:none;box-shadow:none;width:100%;min-height:0;margin:0;padding:0;
+                page-break-inside:avoid;transform:none;}
+    .lear-logo{width:150px;}
+    table.sheet-table tbody tr{height:58px;}</style></head><body>${hojas}</body></html>`);
   ventana.document.close(); ventana.focus();
   setTimeout(()=>ventana.print(), 500);
 }
@@ -1489,11 +1491,6 @@ async function renderTecnico(){
           <button class="btn small ghost" type="button" onclick="document.getElementById('ref_nueva').style.display='none'">Cancelar</button>
         </div>
       </div>
-      <div class="field">
-        <label>📷 Foto de la falla (opcional)</label>
-        <input type="file" id="f_foto" accept="image/*" capture="environment" onchange="previsualizarFoto(this,'prev_foto')">
-        <div id="prev_foto" style="margin-top:8px;"></div>
-      </div>
       <label class="checkline"><input type="checkbox" id="f_movio"> Se movió módulo de posición</label>
       <label class="checkline"><input type="checkbox" id="f_verifico"> Se verificó módulo quede en cuadrante especificado</label>
       <label class="checkline"><input type="checkbox" id="f_solicitar_apqp"> 📩 Solicitar firma de APQP (le da acceso a este registro)</label>
@@ -1566,7 +1563,6 @@ async function agregarFila(){
     tiempoExtra: document.getElementById('f_extra').checked,
     registradoEn: ahoraISO(),
     numeroParte, parteDesc,
-    foto: fotoTemp || '',
     gafete: document.getElementById('f_gafete').value.trim(),
     sintomas, acciones: document.getElementById('f_acciones').value.trim(),
     material: document.getElementById('f_material').value.trim(),
@@ -1587,7 +1583,7 @@ async function agregarFila(){
   /* Cada refacción usada suma una vez en el catálogo */
   for(const r of refaccionesElegidas) registrarRefaccion(r.numero_parte, r.descripcion||'');
   refaccionesElegidas = [];
-  fotoTemp = null; cacheHojasFallas = null;
+  cacheHojasFallas = null;
   STATE.borradorRegistro = null; borrarBorradorLocal();
 
   /* Notificar al auditor de calidad asignado a este UBT */
@@ -3168,10 +3164,11 @@ function imprimirHoja(elId, sheetKey){
     <style>
       body{background:#fff;margin:0;padding:10px;}
       .no-print{display:none !important;}
-      @page{size:letter landscape;margin:5mm;}
-      html,body{width:100%;}
-      .sheet-page{border:none;box-shadow:none;width:1056px;min-height:790px;margin:0;padding:0;
-                  transform:scale(.945);transform-origin:top left;}
+      @page{size:letter landscape;margin:6mm;}
+      html,body{width:100%;margin:0;padding:0;}
+      .sheet-page{border:none;box-shadow:none;width:100%;min-height:0;margin:0;padding:0;transform:none;}
+      .lear-logo{width:150px;}
+      table.sheet-table tbody tr{height:58px;}
     </style></head><body>${contenido.outerHTML}</body></html>`);
   ventana.document.close();
   ventana.focus();
@@ -3247,9 +3244,10 @@ function renderSheetVisual(sheet, opts){
   const filas = sheet.filas || [];
 
   /* Casillas de máquina, en el mismo acomodo que el papel: 4 columnas de 3 renglones */
+  const gruposMaquinas = checklistGroups.filter(g => g[0] !== 'Otros');
   const chkHtml = [0,1,2].map(r => {
     let tds = '';
-    checklistGroups.forEach((col, ci) => {
+    gruposMaquinas.forEach((col, ci) => {
       const item = col[r] || null;
       const on = item && item === sheet.maquina;
       if(ci === 0){
@@ -3324,12 +3322,12 @@ function renderSheetVisual(sheet, opts){
         <span><b>UBT No.</b> <u>${escapeHtml(sheet.ubtNo)}</u></span>
         <span style="margin-left:auto;font-size:9.5px;color:#555;">${escapeHtml(sheet.planta||'')} · Hoja ${sheet.pagina||1}</span>
       </div>
-      <table class="sheet-table">
+      <table class="sheet-table ${permiteEditar?'con-editar':''}">
         <colgroup>
           <col class="col-fecha"><col class="col-gafete"><col class="col-hora"><col class="col-hora">
           <col class="col-sint"><col class="col-acc"><col class="col-mat">
           <col class="col-firma"><col class="col-firma">
-          <col class="col-si"><col class="col-si"><col class="col-firma">
+          <col class="col-si"><col class="col-si"><col class="col-apqp">
           ${permiteEditar?'<col class="col-edit">':''}
         </colgroup>
         <thead><tr>
