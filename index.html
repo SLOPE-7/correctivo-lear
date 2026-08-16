@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Sistema de Correctivo — Lear</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#8a1f1f">
@@ -200,6 +203,8 @@
   .tpm-firma-tit{font-size:8px;}
   @media(max-width:760px){ .tpm-hoja{padding:8px;} table.tpm-table{min-width:900px;} }
   .no-print{}
+  #barra_version{position:sticky;top:0;z-index:61;background:#0f3d5c;color:#fff;text-align:center;padding:9px 12px;font-size:12.5px;font-weight:700;line-height:1.35;}
+  #barra_version button{margin-left:8px;background:#fff;color:#0f3d5c;border:none;border-radius:7px;padding:5px 12px;font-weight:800;font-size:12px;cursor:pointer;}
   #barra_conexion{position:sticky;top:0;z-index:60;background:#a13636;color:#fff;text-align:center;padding:8px 12px;font-size:12.5px;font-weight:700;line-height:1.3;}
   @media print{
     .no-print{display:none !important;}
@@ -208,9 +213,10 @@
 </style>
 </head>
 <body>
+<div id="barra_version" class="no-print" style="display:none;"></div>
 <div id="barra_conexion" class="no-print" style="display:none;">📴 Sin conexión — lo que escribas se guarda en este dispositivo, pero no se enviará hasta que vuelva el internet.</div>
 <div id="app"></div>
-<div class="pie-marca no-print">Creado por <b>KAL7</b>, Claude · <span id="pie_version"></span></div>
+<div class="pie-marca no-print">Creado por <b>KAL7</b>, Claude · <span id="pie_version" onclick="actualizarApp()" style="cursor:pointer;text-decoration:underline dotted;"></span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -343,7 +349,49 @@ const DEFAULT_CODES = { tecnico:"Mantto", auditor:"Calidad", apqp:"APQP", superv
 
 function pintarVersion(){
   const el = document.getElementById('pie_version');
-  if(el) el.textContent = 'v' + APP_VERSION;
+  if(el){ el.textContent = 'v' + APP_VERSION; el.title = 'Toca para buscar actualización'; }
+}
+
+/* ---------- Actualización de la app ----------
+   El service worker guarda el index.html en el teléfono, por eso algunos
+   equipos se quedaban con una versión vieja. Esto lo detecta y lo limpia. */
+async function actualizarApp(){
+  showToast('🔄 Buscando versión nueva...');
+  try{
+    if('caches' in window){
+      const llaves = await caches.keys();
+      await Promise.all(llaves.map(k => caches.delete(k)));
+    }
+    if('serviceWorker' in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    localStorage.removeItem('ultima_revision_version');
+  }catch(e){ console.warn(e); }
+  /* El parámetro obliga al servidor a mandar el archivo otra vez, sin caché */
+  location.replace(location.pathname + '?v=' + Date.now());
+}
+
+function mostrarBarraVersion(nueva){
+  const b = document.getElementById('barra_version');
+  if(!b) return;
+  b.innerHTML = `⬆️ Hay una versión nueva (v${nueva}). Tú tienes la v${APP_VERSION}.
+    <button onclick="actualizarApp()">Actualizar ahora</button>`;
+  b.style.display = 'block';
+}
+
+/* Compara la versión que corre en este equipo contra la del servidor */
+async function revisarVersionNueva(forzar){
+  try{
+    const ultima = Number(localStorage.getItem('ultima_revision_version') || 0);
+    if(!forzar && Date.now() - ultima < 60*60*1000) return;   /* máximo una vez por hora */
+    localStorage.setItem('ultima_revision_version', String(Date.now()));
+    const r = await fetch(location.pathname + '?chk=' + Date.now(), { cache:'no-store' });
+    if(!r.ok) return;
+    const txt = await r.text();
+    const m = txt.match(/APP_VERSION\s*=\s*'([^']+)'/);
+    if(m && m[1] !== APP_VERSION) mostrarBarraVersion(m[1]);
+  }catch(e){ /* sin conexión: no pasa nada */ }
 }
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
 function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -950,6 +998,7 @@ async function actualizarDatos(){
   STATE.plantasCfg = await getPlantasConfig();
   if(STATE.nombre) STATE.usuario = await getUsuario(STATE.nombre);
   await render();
+  revisarVersionNueva(true);        /* de paso revisa si hay versión nueva del programa */
   showToast('Actualizado ✓');
 }
 function cambiarRol(){
@@ -4537,7 +4586,7 @@ async function destinatariosPara(rolBuscado, planta, ubt){
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js')
-      .then(reg => console.log('Service Worker registrado:', reg.scope))
+      .then(reg => { console.log('Service Worker registrado:', reg.scope); reg.update(); })
       .catch(err => console.warn('No se pudo registrar el Service Worker:', err));
   });
 }
@@ -4593,6 +4642,7 @@ function borrarBorradorLocal(){ try{ localStorage.removeItem(CLAVE_BORRADOR); }c
   }
   pintarVersion();
   render();
+  setTimeout(()=>revisarVersionNueva(false), 4000);
 })();
 </script>
 </body>
