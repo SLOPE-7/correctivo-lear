@@ -163,6 +163,14 @@
   .pie-marca{text-align:center;font-size:10.5px;color:#9aa1a9;opacity:.65;padding:14px 10px 20px;letter-spacing:.3px;user-select:none;}
   .pie-marca b{font-weight:700;color:#8a9099;}
   /* --- Hoja TPM (formato de piso) --- */
+  .ref-item{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border:1px solid #e2e5e8;border-radius:10px;margin-bottom:8px;background:#fff;}
+  .ref-veces{flex:none;width:52px;text-align:center;background:#eef4f8;border-radius:8px;padding:7px 4px;}
+  .ref-veces b{display:block;font-size:19px;line-height:1;color:#0f3d5c;}
+  .ref-veces span{font-size:10px;color:var(--muted);}
+  .ref-datos{flex:1;min-width:0;}
+  .ref-parte{font-weight:800;font-size:13.5px;word-break:break-word;}
+  .ref-desc{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;word-break:break-word;}
+  .ref-fecha{font-size:11px;color:#9aa1a9;margin-top:4px;}
   .tpm-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;}
   .tpm-hoja{background:#fff;border:1px solid #333;padding:14px 16px;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;width:816px;min-height:1056px;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.10);}
   .tpm-rev{text-align:right;font-size:9px;margin-bottom:10px;}
@@ -247,13 +255,17 @@ const MAX_FILAS_POR_HOJA = 7;
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.5.2 = reloj sincronizado con el servidor (los tiempos ya cuadran entre equipos),
+           tiempo de espera y de reparación visibles, botón de terminar TPM y notificar,
+           impresión del TPM a hoja carta completa y solo para mantenimiento,
+           refacciones en tarjetas, ver correctivos y TPM por planta y UBT
    1.5.1 = TPM: hoja en vertical tamaño carta, guiones en días no llenados, comentarios
            que llena el operador, ayudas visuales con foto y acceso para mantenimiento,
            supervisores, auditor, APQP y líder
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.5.1';
+const APP_VERSION = '1.5.2';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -401,9 +413,27 @@ async function revisarVersionNueva(forzar){
 }
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
 function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+/* ---------- Reloj sincronizado con el servidor ----------
+   Cada equipo tiene su propia hora y algunos están mal ajustados. Eso hacía que
+   los tiempos de espera y de reparación no cuadraran entre celulares. Aquí se toma
+   la hora que manda el servidor en cada respuesta y se corrige la diferencia. */
+let DESFASE_RELOJ = 0;
+function sincronizarReloj(res){
+  try{
+    const h = res && res.headers && res.headers.get('Date');
+    if(!h) return;
+    const t = Date.parse(h);
+    if(t) DESFASE_RELOJ = t - Date.now();
+  }catch(e){}
+}
+function ahora(){ return new Date(Date.now() + DESFASE_RELOJ); }
+function ahoraMs(){ return Date.now() + DESFASE_RELOJ; }
+function ahoraISO(){ return ahora().toISOString(); }
+function relojDesfasado(){ return Math.abs(DESFASE_RELOJ) > 5*60*1000; }
+
 /* Fecha local: con toISOString, después de las 18:00 en México ya marcaba el día siguiente */
-function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-function nowLabel(){ return new Date().toLocaleString('es-MX'); }
+function todayISO(){ const d=ahora(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function nowLabel(){ return ahora().toLocaleString('es-MX'); }
 function escapeHtml(s){ const d=document.createElement('div'); d.textContent=(s===0?'0':(s||'')); return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 /* Escapa un texto para meterlo dentro de un onclick="fn('...')" */
 function escArg(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
@@ -427,6 +457,7 @@ async function sbFetch(path, options={}){
       ...(options.headers||{})
     }
   });
+  sincronizarReloj(res);
   if(!res.ok){
     const txt = await res.text();
     throw new Error('Supabase ' + res.status + ': ' + txt);
@@ -449,7 +480,7 @@ async function saveConfig(cfg){
   await sbFetch('config?on_conflict=clave', {
     method: 'POST',
     prefer: 'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({ clave:'accesscodes', valor: cfg, actualizado_en: new Date().toISOString() })
+    body: JSON.stringify({ clave:'accesscodes', valor: cfg, actualizado_en: ahoraISO() })
   });
 }
 async function getModoPruebas(){
@@ -461,7 +492,7 @@ async function getModoPruebas(){
 async function saveModoPruebas(activo){
   await sbFetch('config?on_conflict=clave', {
     method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({ clave:'modo_pruebas', valor:{activo:!!activo}, actualizado_en:new Date().toISOString() })
+    body: JSON.stringify({ clave:'modo_pruebas', valor:{activo:!!activo}, actualizado_en:ahoraISO() })
   });
 }
 async function getTurnosConfig(){
@@ -473,7 +504,7 @@ async function getTurnosConfig(){
 async function saveTurnosConfig(cfg){
   await sbFetch('config?on_conflict=clave', {
     method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({ clave:'turnos', valor: cfg, actualizado_en:new Date().toISOString() })
+    body: JSON.stringify({ clave:'turnos', valor: cfg, actualizado_en:ahoraISO() })
   });
 }
 async function getPlantasConfig(){
@@ -486,7 +517,7 @@ async function savePlantasConfig(cfg){
   await sbFetch('config?on_conflict=clave', {
     method: 'POST',
     prefer: 'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({ clave:'plantas', valor: cfg, actualizado_en: new Date().toISOString() })
+    body: JSON.stringify({ clave:'plantas', valor: cfg, actualizado_en: ahoraISO() })
   });
 }
 function ubtsDeLaPlanta(plantasCfg, planta){
@@ -582,7 +613,7 @@ async function saveSheet(key, sheet){
     body: JSON.stringify({
       clave: key, planta: sheet.planta, ubt_no: sheet.ubtNo, maquina: sheet.maquina,
       mes: sheet.mes, anio: sheet.anio, pagina: sheet.pagina||1,
-      filas: sheet.filas||[], actualizado_en: new Date().toISOString()
+      filas: sheet.filas||[], actualizado_en: ahoraISO()
     })
   });
 }
@@ -827,7 +858,7 @@ function renderTopbar(){
     <div class="tb-actions">
       <button class="tb-btn" onclick="irInicio()" title="Inicio">🏠<span>Inicio</span></button>
       <button class="tb-btn" onclick="actualizarDatos()" title="Actualizar">🔄<span>Actualizar</span></button>
-      ${puedeVerTodo && !STATE.viendoTodo && !STATE.vista ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos">👁️<span>Correctivos</span></button>`:''}
+      ${puedeVerTodo && !STATE.viendoTodo && !STATE.vista ? `<button class="tb-btn" onclick="verCorrectivos()" title="Ver correctivos y TPM">👁️<span>Correctivos y TPM</span></button>`:''}
       ${STATE.rol==='tecnico' ? `<button class="tb-btn ${STATE.vista==='solicitudes'?'on':''}" style="background:#e0b40044;border-color:#e0b40088;" onclick="abrirVista('solicitudes')" title="Solicitudes de mantenimiento">💡<span>Focos</span></button>`:''}
       ${STATE.rol==='tecnico' ? `<button class="tb-btn ${STATE.vista==='reportar'?'on':''}" style="background:#c7770044;border-color:#c7770088;" onclick="abrirVista('reportar')" title="Reportar falla al supervisor">📢<span>Reportar</span></button>`:''}
       ${['tecnico','supervisor'].includes(STATE.rol) ? `<button class="tb-btn ${STATE.vista==='analisis'?'on':''}" onclick="abrirVista('analisis')" title="Reportes y análisis">📊<span>Análisis</span></button>`:''}
@@ -929,7 +960,7 @@ function renderMenuInicio(){
     T('ambar','💡','Focos','Solicitudes de producción',"abrirVista('solicitudes')");
     T('gris','📢','Reportar','Avisar al supervisor',"abrirVista('reportar')");
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
-    T('','👁️','Ver correctivos','Solo lectura','verCorrectivos()');
+    T('','👁️','Ver correctivos y TPM','Por planta y UBT','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
@@ -941,7 +972,7 @@ function renderMenuInicio(){
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(esAuditorTipo){
-    T('rojo wide','👁️','Ver correctivos','Hojas de mis líneas','verCorrectivos()');
+    T('rojo wide','👁️','Ver correctivos y TPM','Hojas de mis líneas','verCorrectivos()');
     T('','📋','Mis UBTs','Líneas asignadas','editarUbts()');
     T('','🏠','Mi panel','Pendientes de firma','irAPanel()');
     T('azul','🗓️','Hoja TPM',rol==='auditor'?'Revisar y firmar el mes':'Ver e imprimir','abrirTpm()');
@@ -951,7 +982,7 @@ function renderMenuInicio(){
     T('rojo wide','🏠','Mi panel','Resumen de hojas','irAPanel()');
     T('ambar','📬','Buzón','Reportes recibidos',"abrirVista('buzon')");
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
-    T('','👁️','Ver correctivos','Todas las plantas','verCorrectivos()');
+    T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
@@ -1432,7 +1463,7 @@ async function agregarFila(){
     minutosParo: minutosEntre(hi, hf),
     turno: document.getElementById('f_turno').value,
     tiempoExtra: document.getElementById('f_extra').checked,
-    registradoEn: new Date().toISOString(),
+    registradoEn: ahoraISO(),
     numeroParte, parteDesc,
     foto: fotoTemp || '',
     gafete: document.getElementById('f_gafete').value.trim(),
@@ -1446,7 +1477,7 @@ async function agregarFila(){
     firmaAPQPNombre:'', firmaAPQPFecha:'',
     estadoAuditor: 'pendiente',
     estadoAPQP: solicitarApqp ? 'pendiente' : 'no_aplica',
-    creadoEn: new Date().toISOString()
+    creadoEn: ahoraISO()
   };
   sheet.filas.push(fila);
   try{ await saveSheet(sheetActivaKey, sheet); }
@@ -1817,7 +1848,7 @@ async function getFirmasTpm(clave){
 async function saveFirmasTpm(clave, valor){
   await sbFetch('config?on_conflict=clave', {
     method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({ clave, valor, actualizado_en:new Date().toISOString() })
+    body: JSON.stringify({ clave, valor, actualizado_en:ahoraISO() })
   });
 }
 
@@ -1826,6 +1857,9 @@ let tpmCtx = null;        /* { planta, ubt, maquina, anio, mes, marcas, firmas, 
 let tpmLlenado = null;    /* { turno:'A', operador:'Nombre' } quién está marcando */
 let tGuardaTpm = null;
 
+/* Solo Mantenimiento y Supervisor de Mantenimiento imprimen la hoja */
+function puedeImprimirTpm(){ return ['tecnico','supervisor','admin'].includes(STATE.rol); }
+
 function tpmPuedeLlenar(){
   if(STATE.rol !== 'produccion') return false;
   const sub = STATE.usuario?.subrol || 'operador';
@@ -1833,9 +1867,17 @@ function tpmPuedeLlenar(){
 }
 
 /* Abre la hoja mensual */
+/* Abre la hoja TPM de una planta/UBT/máquina concretas (desde Ver correctivos y TPM) */
+function abrirTpmDe(planta, ubt, maquina){
+  STATE.tpmSel = { planta, ubt, maquina, anio: ahora().getFullYear(), mes: ahora().getMonth() };
+  STATE.viendoTodo = false;
+  STATE.vista = 'tpm';
+  render();
+}
 function abrirTpm(ubt, maquina){
-  const hoy = new Date();
+  const hoy = ahora();
   STATE.tpmSel = {
+    planta: STATE.tpmSel?.planta || STATE.plantaHoy,
     ubt: ubt || STATE.tpmSel?.ubt || '',
     maquina: maquina || STATE.tpmSel?.maquina || '',
     anio: STATE.tpmSel?.anio ?? hoy.getFullYear(),
@@ -1848,6 +1890,7 @@ function cambiarTpmSel(){
   const u = document.getElementById('tpm_ubt'), m = document.getElementById('tpm_maquina');
   const me = document.getElementById('tpm_mes'), an = document.getElementById('tpm_anio');
   STATE.tpmSel = {
+    planta: STATE.tpmSel.planta,
     ubt: u ? u.value : STATE.tpmSel.ubt,
     maquina: m ? m.value : STATE.tpmSel.maquina,
     mes: me ? Number(me.value) : STATE.tpmSel.mes,
@@ -1866,7 +1909,7 @@ function cambiarTurnoLlenado(){
 /* ---------- Vista de la hoja TPM ---------- */
 async function renderVistaTpm(opts){
   opts = opts || {};
-  const planta = STATE.plantaHoy;
+  const planta = STATE.tpmSel?.planta || STATE.plantaHoy;
   const esOperador = esOperadorProd();
 
   /* UBTs y máquinas disponibles según el rol */
@@ -1930,7 +1973,7 @@ async function renderVistaTpm(opts){
         <select id="tpm_maquina" onchange="cambiarTpmSel()">${MAQ_TPM.map(m=>`<option ${m===sel.maquina?'selected':''}>${escapeHtml(m)}</option>`).join('')}</select>`}
         <select id="tpm_mes" onchange="cambiarTpmSel()">${MESES.map((m,i)=>`<option value="${i}" ${i===sel.mes?'selected':''}>${m}</option>`).join('')}</select>
         <select id="tpm_anio" onchange="cambiarTpmSel()">${[sel.anio-1, sel.anio, sel.anio+1].map(a=>`<option ${a===sel.anio?'selected':''}>${a}</option>`).join('')}</select>
-        <button class="btn small secondary" onclick="imprimirTpm()">🖨️ Imprimir</button>
+        ${puedeImprimirTpm()?`<button class="btn small secondary" onclick="imprimirTpm()">🖨️ Imprimir</button>`:''}
       </div>
     </div>`;
 
@@ -1978,7 +2021,9 @@ function renderBarraLlenadoTpm(esOperador){
           <input id="tpm_operador_llenado" value="${escapeHtml(tpmLlenado.operador||'')}" placeholder="Nombre del operador" onchange="cambiarTurnoLlenado()">
         </div>
       </div>`}
-    <div id="tpm_estado_guardado" style="font-size:12.5px;color:var(--muted);"></div>
+    <div id="tpm_estado_guardado" style="font-size:12.5px;color:var(--muted);margin-bottom:10px;"></div>
+    <button class="btn" id="btn_terminar_tpm" onclick="terminarTpmDelDia()">🏁 Terminar TPM de hoy y notificar</button>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:6px;">Se avisa al <b>Líder</b> y al <b>Auditor</b> de esta UBT y de tu mismo turno.</div>
   </div>`;
 }
 
@@ -2159,7 +2204,7 @@ async function guardarTpmDeHoy(){
     rol_llenado: STATE.usuario?.subrol || '',
     actividades,
     completo,
-    creado_en: previo?.creado_en || new Date().toISOString()
+    creado_en: previo?.creado_en || ahoraISO()
   };
 
   try{ await saveTpm(reg); }
@@ -2170,8 +2215,34 @@ async function guardarTpmDeHoy(){
   if(est) est.innerHTML = `✓ Guardado — ${hechas} de ${TPM_ACTIVIDADES.length} actividades marcadas` +
     (completo ? ' <b style="color:#1a7a3c;">· TPM del día completo</b>' : '');
 
-  /* Al completarse por primera vez se avisa al auditor y al líder de esa línea */
-  if(completo && !eraCompleto) await avisarTpmCompleto(reg);
+  const btn = document.getElementById('btn_terminar_tpm');
+  if(btn){
+    btn.disabled = !completo;
+    btn.style.opacity = completo ? '1' : '.5';
+  }
+}
+
+/* El operador cierra el TPM del día a propósito, con este botón */
+async function terminarTpmDelDia(){
+  const c = tpmCtx;
+  if(!c) return;
+  const fecha = todayISO();
+  const letra = tpmLlenado.turno;
+  const reg = c.marcas[`${fecha}|${letra}`];
+  if(!reg){ showToast('⚠️ Primero marca las actividades'); return; }
+  const hechas = TPM_ACTIVIDADES.filter(a => reg.actividades && reg.actividades[a.id]).length;
+  if(hechas < TPM_ACTIVIDADES.length){
+    showToast(`⚠️ Faltan ${TPM_ACTIVIDADES.length - hechas} actividades por marcar`);
+    return;
+  }
+  if(reg.avisado){ showToast('Ya se había avisado hoy'); return; }
+  const btn = document.getElementById('btn_terminar_tpm');
+  if(btn){ btn.disabled = true; btn.textContent = 'Enviando aviso...'; }
+  const enviados = await avisarTpmCompleto(reg);
+  reg.avisado = true;
+  try{ await saveTpm(reg); }catch(e){ console.warn(e); }
+  showToast(enviados > 0 ? `✓ TPM terminado — se avisó a ${enviados} persona(s)` : '✓ TPM terminado (nadie asignado a esta línea y turno)');
+  render();
 }
 
 async function avisarTpmCompleto(reg){
@@ -2183,10 +2254,11 @@ async function avisarTpmCompleto(reg){
       ((u.ubtsPorPlanta||{})[reg.planta]||[]).includes(reg.ubt_no) &&
       (!u.turno || letraTurno(u.turno) === letraTurno(reg.turno))
     ).map(u=>slug(u.nombre));
-    if(destino.length === 0) return;
+    if(destino.length === 0) return 0;
     enviarNotificacion(destino, '📋 TPM diario terminado',
       `${reg.operador} terminó el TPM de la UBT ${reg.ubt_no} (${reg.maquina}), turno ${letraTurno(reg.turno)}. Falta tu firma en la hoja del mes.`);
-  }catch(e){ console.warn(e); }
+    return destino.length;
+  }catch(e){ console.warn(e); return 0; }
 }
 
 /* ---------- Comentarios de la hoja ---------- */
@@ -2220,7 +2292,7 @@ async function getImagenesTpm(maquina){
 async function saveImagenesTpm(maquina, valor){
   await sbFetch('config?on_conflict=clave', {
     method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-    body: JSON.stringify({ clave: claveImagenesTpm(maquina), valor, actualizado_en:new Date().toISOString() })
+    body: JSON.stringify({ clave: claveImagenesTpm(maquina), valor, actualizado_en:ahoraISO() })
   });
 }
 
@@ -2296,6 +2368,7 @@ async function quitarImagenTpm(actId){
 
 /* ---------- Imprimir la hoja ---------- */
 function imprimirTpm(){
+  if(!puedeImprimirTpm()){ showToast('⚠️ Solo Mantenimiento puede imprimir la hoja'); return; }
   const hoja = document.querySelector('#tpm_hoja .tpm-hoja');
   if(!hoja){ showToast('⚠️ No se encontró la hoja'); return; }
   const c = tpmCtx;
@@ -2305,9 +2378,11 @@ function imprimirTpm(){
   if(!v){ showToast('⚠️ El navegador bloqueó la ventana emergente'); return; }
   v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>${estilos}
     <style>body{background:#fff;margin:0;padding:0;} .no-print{display:none !important;}
-    @page{size:letter portrait;margin:8mm;}
-    .tpm-hoja{border:none;box-shadow:none;width:816px;min-height:0;margin:0;
-              transform:scale(.80);transform-origin:top left;}
+    @page{size:letter portrait;margin:5mm;}
+    html,body{width:100%;}
+    .tpm-hoja{border:none;box-shadow:none;width:816px;min-height:1040px;margin:0;padding:0;
+              transform:scale(.945);transform-origin:top left;}
+    .tpm-cel{height:40px;}
     .tpm-chk-cel{display:none;}
     </style></head><body>${hoja.outerHTML}</body></html>`);
   v.document.close(); v.focus();
@@ -2451,6 +2526,8 @@ function renderActivasPlanta(activas){
 /* Tarjeta con la linea de estado, para que el solicitante sepa si ya la recibieron */
 function tarjetaMiSolicitud(s){
   const min = minutosDesde(s.creado_en);
+  const espera = minutosEntreISO(s.creado_en, s.atendido_en);
+  const reparacion = minutosEntreISO(s.atendido_en, s.terminado_en);
   const recibida = s.estado==='atendida' || s.estado==='terminada';
   const terminada = s.estado==='terminada';
   const tarde = !recibida && min >= 10;
@@ -2466,12 +2543,12 @@ function tarjetaMiSolicitud(s){
     </div>
     ${s.nota?`<div style="font-size:12.5px;color:var(--muted);margin-top:5px;">${escapeHtml(s.nota)}</div>`:''}
     <div style="margin-top:10px;border-top:1px dashed ${borde};padding-top:6px;">
-      ${paso(true, `Enviada · hace ${min} min`)}
+      ${paso(true, `Enviada · ${soloHora(s.creado_en)}`)}
       ${paso(recibida, recibida
-          ? `Recibida por <b>${escapeHtml(s.atendido_por||'un técnico')}</b>${s.atendido_en?` · hace ${minutosDesde(s.atendido_en)} min`:''}`
+          ? `Recibida por <b>${escapeHtml(s.atendido_por||'un técnico')}</b> · ${soloHora(s.atendido_en)}${espera!==null?` <span style="color:#a16d07;">(esperó ${formatoDuracion(espera)})</span>`:''}`
           : (tarde ? `<b style="color:#a13636;">Todavía nadie la recibe (${min} min)</b> — se les está recordando` : 'Aún no la recibe ningún técnico'))}
       ${paso(terminada, terminada
-          ? `Trabajo terminado por <b>${escapeHtml(s.terminado_por||s.atendido_por||'')}</b>`
+          ? `Trabajo terminado por <b>${escapeHtml(s.terminado_por||s.atendido_por||'')}</b> · ${soloHora(s.terminado_en)}${reparacion!==null?` <span style="color:#0f3d5c;">(reparación ${formatoDuracion(reparacion)})</span>`:''}`
           : 'Trabajo sin terminar')}
     </div>
     ${!recibida ? `<button class="btn ghost small" style="margin-top:10px;" onclick="cancelarMiFoco('${s.id}')">✖ Ya no la necesito</button>` : ''}
@@ -2507,12 +2584,15 @@ async function cancelarMiFoco(id){
 }
 
 function minutosDesde(iso){
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime())/60000));
+  return Math.max(0, Math.floor((ahoraMs() - new Date(iso).getTime())/60000));
 }
+/* Si dos equipos tienen la hora un poco distinta puede salir negativo:
+   en ese caso se toma como 0, no como "sin dato". */
 function minutosEntreISO(a, b){
   if(!a || !b) return null;
-  const d = Math.floor((new Date(b).getTime() - new Date(a).getTime())/60000);
-  return d >= 0 ? d : null;
+  const d = Math.round((new Date(b).getTime() - new Date(a).getTime())/60000);
+  if(d < 0) return (d > -180) ? 0 : null;   /* diferencias chicas = reloj desfasado */
+  return d;
 }
 function horaCorta(iso){
   if(!iso) return '—';
@@ -2567,8 +2647,8 @@ async function encenderFoco(){
     turno: STATE.usuario?.turno || '',
     nota,
     estado: 'pendiente',
-    creado_en: new Date().toISOString(),
-    ultimo_recordatorio: new Date().toISOString()
+    creado_en: ahoraISO(),
+    ultimo_recordatorio: ahoraISO()
   };
   try{ await saveSolicitud(sol); }
   catch(err){ showToast('⚠️ '+(err.message||err)); return; }
@@ -2593,7 +2673,7 @@ async function atenderFoco(id){
 
   s.estado = 'atendida';
   s.atendido_por = STATE.nombre;
-  s.atendido_en = new Date().toISOString();
+  s.atendido_en = ahoraISO();
   await saveSolicitud(s);
 
   /* Avisar a quien solicitó */
@@ -2619,7 +2699,7 @@ async function terminarFoco(id){
   s.estado = 'terminada';
   /* Solo se mandan estas columnas si existen en la tabla */
   if('terminado_por' in s) s.terminado_por = STATE.nombre;
-  if('terminado_en' in s) s.terminado_en = new Date().toISOString();
+  if('terminado_en' in s) s.terminado_en = ahoraISO();
   try{ await saveSolicitud(s); }
   catch(err){ showToast('⚠️ '+(err.message||err)); return; }
 
@@ -2740,7 +2820,8 @@ async function renderHistorialFocos(){
             ${celda('Se solicitó', soloHora(f.creado_en), '')}
             ${celda('Aceptó', soloHora(f.atendido_en), espera!==null?('esperó '+formatoDuracion(espera)):'sin recibir')}
             ${celda('Hora final', soloHora(f.terminado_en), term?'':'sin terminar')}
-            ${celda('Duró', rep!==null?formatoDuracion(rep):'—', total!==null?('total '+formatoDuracion(total)):'')}
+            ${celda('Tiempo de espera', espera!==null?formatoDuracion(espera):'—', 'de solicitud a llegada')}
+            ${celda('Tiempo de reparación', rep!==null?formatoDuracion(rep):'—', total!==null?('total '+formatoDuracion(total)):'')}
           </div>
           ${f.nota?`<div style="font-size:12.5px;margin-top:8px;background:#f7f9fa;border-radius:7px;padding:8px;">${escapeHtml(f.nota)}</div>`:''}
         </div>`;
@@ -2780,7 +2861,7 @@ async function reclamarRecordatorio(id, corteISO){
   try{
     const r = await sbFetch(`solicitudes?id=eq.${encodeURIComponent(id)}&ultimo_recordatorio=lt.${encodeURIComponent(corteISO)}`, {
       method:'PATCH', prefer:'return=representation',
-      body: JSON.stringify({ ultimo_recordatorio: new Date().toISOString() })
+      body: JSON.stringify({ ultimo_recordatorio: ahoraISO() })
     });
     return Array.isArray(r) && r.length > 0;
   }catch(e){ console.warn(e); return false; }
@@ -2853,7 +2934,8 @@ async function renderVerCorrectivos(){
     ? Object.entries(asignadosResumen()).map(([pl,v])=>`${pl}: ${v.join(', ')}`).join(' · ')
     : '';
 
-  return `<div class="card"><h2>👁️ Ver correctivos — solo lectura</h2>
+  return `<div class="card"><h2>👁️ Ver correctivos y TPM — solo lectura</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Abre una planta y una UBT: ahí están sus hojas de correctivo y los botones para ver la hoja de TPM de cada máquina.</p>
     ${esAuditorTipo ? `<p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Solo se muestran tus líneas asignadas${misUbtsTxt?(' → '+escapeHtml(misUbtsTxt)):''}.</p>` : ''}
     <div class="filters">
       <input id="vt_filtro_planta" placeholder="Filtrar por planta" value="${escapeHtml(plantaDefault)}" oninput="filtrarVerTodo()" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" name="zzv_pl">
@@ -2922,7 +3004,13 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
           const totalUbt = Object.values(maquinas).reduce((a,arr)=>a+arr.length,0);
           return `<details style="margin-bottom:6px;">
             <summary style="cursor:pointer;font-weight:600;padding:6px 10px;background:#eef1f4;border-radius:6px;">UBT ${escapeHtml(ubt)} (${totalUbt})</summary>
-            ${puedeImprimir ? `<div style="padding:8px 0 0 14px;"><button class="btn small secondary no-print" onclick="agregarUbtACola('${planta.replace(/'/g,"\\'")}','${ubt.replace(/'/g,"\\'")}')">🖨️ Agregar todo el UBT ${escapeHtml(ubt)} a la cola</button></div>` : ''}
+            ${puedeImprimir ? `<div style="padding:8px 0 0 14px;"><button class="btn small secondary no-print" onclick="agregarUbtACola('${escArg(planta)}','${escArg(ubt)}')">🖨️ Agregar todo el UBT ${escapeHtml(ubt)} a la cola</button></div>` : ''}
+            <div class="no-print" style="padding:8px 0 0 14px;">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">📋 Hojas de TPM de esta UBT:</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                ${MAQ_TPM.map(m=>`<button class="btn small ghost" onclick="abrirTpmDe('${escArg(planta)}','${escArg(ubt)}','${escArg(m)}')">${escapeHtml(m)}</button>`).join('')}
+              </div>
+            </div>
             <div style="padding:8px 0 0 14px;">
               ${Object.keys(maquinas).sort().map(maq=>`
                 <details style="margin-bottom:6px;">
@@ -3348,8 +3436,8 @@ async function encenderFocoPrueba(){
     turno: 'TA',
     nota: '(Solicitud de prueba generada desde Administrador)',
     estado: 'pendiente',
-    creado_en: new Date().toISOString(),
-    ultimo_recordatorio: new Date().toISOString()
+    creado_en: ahoraISO(),
+    ultimo_recordatorio: ahoraISO()
   };
   try{ await saveSolicitud(sol); }
   catch(err){ showToast('⚠️ '+(err.message||err)); return; }
@@ -3419,7 +3507,7 @@ async function guardarCatalogoPartes(){
     try{
       await sbFetch('refacciones?on_conflict=numero_parte', {
         method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-        body: JSON.stringify({ numero_parte:numero, descripcion:desc, ultima_vez:new Date().toISOString() })
+        body: JSON.stringify({ numero_parte:numero, descripcion:desc, ultima_vez:ahoraISO() })
       });
       ok++;
     }catch(e){ console.warn(e); }
@@ -3767,7 +3855,7 @@ async function descargarRespaldo(){
   showToast('Preparando respaldo...');
   const hojas = await listSheets();
   const usuarios = await listUsuarios();
-  const data = { fecha:new Date().toISOString(), hojas, usuarios, plantas:STATE.plantasCfg };
+  const data = { fecha:ahoraISO(), hojas, usuarios, plantas:STATE.plantasCfg };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -4063,7 +4151,7 @@ async function registrarRefaccion(numeroParte, descripcion){
     const veces = (existente && existente[0]) ? (existente[0].veces_usada||0)+1 : 1;
     await sbFetch('refacciones?on_conflict=numero_parte', {
       method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
-      body: JSON.stringify({ numero_parte:numeroParte, descripcion: ((existente&&existente[0]&&existente[0].descripcion)?existente[0].descripcion:(descripcion||'')), veces_usada:veces, ultima_vez:new Date().toISOString() })
+      body: JSON.stringify({ numero_parte:numeroParte, descripcion: ((existente&&existente[0]&&existente[0].descripcion)?existente[0].descripcion:(descripcion||'')), veces_usada:veces, ultima_vez:ahoraISO() })
     });
   }catch(e){ console.warn(e); }
 }
@@ -4369,11 +4457,18 @@ async function cargarRefaccionesAnalisis(){
   const cont = document.getElementById('an_refacciones');
   if(!cont) return;
   const refs = await listRefacciones();
+  /* En tarjetas y no en tabla: las descripciones son largas y en el celular se desbordaba */
   cont.innerHTML = refs.length === 0
     ? '<div class="empty">Todavía no se han registrado refacciones.</div>'
-    : `<table class="admin-tbl"><thead><tr><th>No. de Parte</th><th>Descripción</th><th>Veces usada</th><th>Última vez</th></tr></thead><tbody>` +
-      refs.slice(0,40).map(r=>`<tr><td><b>${escapeHtml(r.numero_parte)}</b></td><td>${escapeHtml(r.descripcion||'—')}</td><td>${r.veces_usada}</td><td>${r.ultima_vez?new Date(r.ultima_vez).toLocaleDateString('es-MX'):'—'}</td></tr>`).join('') +
-      `</tbody></table>`;
+    : refs.slice(0,40).map(r=>`
+        <div class="ref-item">
+          <div class="ref-veces"><b>${r.veces_usada}</b><span>${r.veces_usada==1?'vez':'veces'}</span></div>
+          <div class="ref-datos">
+            <div class="ref-parte">${escapeHtml(r.numero_parte)}</div>
+            <div class="ref-desc">${escapeHtml(r.descripcion||'Sin descripción')}</div>
+            <div class="ref-fecha">Última vez: ${r.ultima_vez?new Date(r.ultima_vez).toLocaleDateString('es-MX'):'—'}</div>
+          </div>
+        </div>`).join('');
 }
 
 function descargarCSV(nombre, filas){
@@ -4556,8 +4651,8 @@ async function enviarReporte(){
     foto: fotoTemp || '',
     urgencia: document.getElementById('rp_urgencia').value,
     estado: 'abierto',
-    creado_en: new Date().toISOString(),
-    actualizado_en: new Date().toISOString()
+    creado_en: ahoraISO(),
+    actualizado_en: ahoraISO()
   };
   try{ await saveReporte(r); }
   catch(err){ showToast('⚠️ No se pudo enviar: '+(err.message||err)); return; }
@@ -4591,7 +4686,7 @@ async function cerrarReporte(id){
   r.estado = 'cerrado';
   r.respuesta = resp || 'Atendido.';
   r.atendido_por = STATE.nombre;
-  r.actualizado_en = new Date().toISOString();
+  r.actualizado_en = ahoraISO();
   await saveReporte(r);
   enviarNotificacion([slug(r.tecnico)], '✓ Tu reporte fue atendido', `${STATE.nombre} respondió a tu reporte de UBT ${r.ubt_no}: ${(resp||'Atendido.').slice(0,90)}`);
   showToast('Reporte cerrado ✓');
@@ -4623,7 +4718,8 @@ function minutosEntre(hi, hf){
   return min;
 }
 function formatoDuracion(min){
-  if(!min) return '—';
+  if(min === 0) return 'menos de 1 min';
+  if(min === null || min === undefined || isNaN(min)) return '—';
   const h = Math.floor(min/60), m = min%60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
