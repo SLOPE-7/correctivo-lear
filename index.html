@@ -255,6 +255,8 @@ const MAX_FILAS_POR_HOJA = 7;
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.5.3 = panel del administrador: cada botón abre su pantalla (antes todos caían en el
+           panel), hoja TPM con selector de planta para admin, mantenimiento y supervisor
    1.5.2 = reloj sincronizado con el servidor (los tiempos ya cuadran entre equipos),
            tiempo de espera y de reparación visibles, botón de terminar TPM y notificar,
            impresión del TPM a hoja carta completa y solo para mantenimiento,
@@ -265,7 +267,7 @@ const MAX_FILAS_POR_HOJA = 7;
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.5.2';
+const APP_VERSION = '1.5.3';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -696,6 +698,23 @@ async function render(){
       setTimeout(()=>{ calcularTiempoMuerto(); calcularFallasFrecuentes(); cargarRefaccionesAnalisis(); }, 60);
       return;
     }
+    if(STATE.vista === 'tpm'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderVistaTpm({embed:true})}</div>`;
+      return;
+    }
+    if(STATE.vista === 'tpm_imgs'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderImagenesTpm()}</div>`;
+      return;
+    }
+    if(STATE.vista === 'historial'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderHistorialFocos()}</div>`;
+      return;
+    }
+    if(STATE.viendoTodo){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderVerCorrectivos()}</div>`;
+      setTimeout(()=>{ limpiarAutorelleno(['vt_filtro_ubt'], [ubtEsperado()]); filtrarVerTodo(); }, 60);
+      return;
+    }
     app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderAdmin()}</div>`;
     setTimeout(()=>{ cargarInfoHistorial(); actualizarUbtsQR(); actualizarUbtsBorrado(); cambiarAlcanceBorrado(); cargarCatalogoPartes(); actualizarUbtsFocoTest(); cargarFocosAdmin(); }, 50);
     return;
@@ -984,12 +1003,14 @@ function renderMenuInicio(){
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
     T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
+    T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
   else if(rol==='admin'){
     T('rojo wide','⚙️','Panel de administración','Usuarios, plantas, turnos','irAPanel()');
     T('azul','📊','Análisis','Reportes generales',"abrirVista('analisis')");
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
+    T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
 
@@ -1877,13 +1898,22 @@ function abrirTpmDe(planta, ubt, maquina){
 function abrirTpm(ubt, maquina){
   const hoy = ahora();
   STATE.tpmSel = {
-    planta: STATE.tpmSel?.planta || STATE.plantaHoy,
+    planta: STATE.tpmSel?.planta || STATE.plantaHoy || '',
     ubt: ubt || STATE.tpmSel?.ubt || '',
     maquina: maquina || STATE.tpmSel?.maquina || '',
     anio: STATE.tpmSel?.anio ?? hoy.getFullYear(),
     mes: STATE.tpmSel?.mes ?? hoy.getMonth()
   };
   STATE.vista = 'tpm';
+  render();
+}
+function elegirPlantaTpm(p){
+  STATE.tpmSel = { ...(STATE.tpmSel||{}), planta:p, ubt:'' };
+  render();
+}
+function verTodasLasPlantasTpm(){ return ['admin','supervisor','tecnico'].includes(STATE.rol); }
+function cambiarPlantaTpm(){
+  STATE.tpmSel = { ...(STATE.tpmSel||{}), planta:'', ubt:'' };
   render();
 }
 function cambiarTpmSel(){
@@ -1909,7 +1939,7 @@ function cambiarTurnoLlenado(){
 /* ---------- Vista de la hoja TPM ---------- */
 async function renderVistaTpm(opts){
   opts = opts || {};
-  const planta = STATE.tpmSel?.planta || STATE.plantaHoy;
+  const planta = STATE.tpmSel?.planta || STATE.plantaHoy || '';
   const esOperador = esOperadorProd();
 
   /* UBTs y máquinas disponibles según el rol */
@@ -1925,6 +1955,15 @@ async function renderVistaTpm(opts){
   }
 
   const volver = opts.embed ? '' : `<div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>`;
+
+  /* Admin, Mantenimiento y Supervisor pueden ver cualquier planta: primero la eligen */
+  if(!planta){
+    return `${volver}<div class="card">
+      <h2>🗓️ Hoja TPM</h2>
+      <p style="font-size:13.5px;">Elige la planta que quieres revisar.</p>
+      <div class="planta-grid">${PLANTA_NOMBRES.map(p=>`<div class="planta-card" onclick="elegirPlantaTpm('${escArg(p)}')">${escapeHtml(p)}</div>`).join('')}</div>
+    </div>`;
+  }
 
   if(ubtsDisp.length === 0){
     return `${volver}<div class="card"><h2>📋 TPM</h2><div class="empty">No tienes UBT asignadas en ${escapeHtml(planta||'')}.</div></div>`;
@@ -1973,6 +2012,7 @@ async function renderVistaTpm(opts){
         <select id="tpm_maquina" onchange="cambiarTpmSel()">${MAQ_TPM.map(m=>`<option ${m===sel.maquina?'selected':''}>${escapeHtml(m)}</option>`).join('')}</select>`}
         <select id="tpm_mes" onchange="cambiarTpmSel()">${MESES.map((m,i)=>`<option value="${i}" ${i===sel.mes?'selected':''}>${m}</option>`).join('')}</select>
         <select id="tpm_anio" onchange="cambiarTpmSel()">${[sel.anio-1, sel.anio, sel.anio+1].map(a=>`<option ${a===sel.anio?'selected':''}>${a}</option>`).join('')}</select>
+        ${verTodasLasPlantasTpm()?`<button class="btn small ghost" onclick="cambiarPlantaTpm()">🏭 ${escapeHtml(planta)}</button>`:''}
         ${puedeImprimirTpm()?`<button class="btn small secondary" onclick="imprimirTpm()">🖨️ Imprimir</button>`:''}
       </div>
     </div>`;
