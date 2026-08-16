@@ -876,8 +876,8 @@ function renderMenuInicio(){
   }
   else if(rol==='produccion'){
     T('verde wide','💡','Solicitar mantenimiento','Encender el foco de tu línea',"abrirVista('foco')");
-    T('rojo','📋','TPM diario',esOperador?'Llenar mi checklist':'Estado de mis líneas','irAPanel()');
-    T('azul','🗓️','Hoja TPM del mes','Formato completo e imprimir','abrirTpm()');
+    T('rojo','📋','TPM diario',esOperador?'Mi hoja del mes':'Estado de mis líneas','irAPanel()');
+    if(!esOperador) T('azul','🗓️','Hoja TPM del mes','Formato completo e imprimir','abrirTpm()');
     if(infoSub?.multiUbt) T('','📌','Mis UBTs','Líneas asignadas','editarUbts()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
@@ -1640,13 +1640,31 @@ async function renderProduccion(){
   const miaRecibida = miasAbiertas.find(x=>x.estado==='atendida');
   const miaEsperando = miasAbiertas.find(x=>x.estado==='pendiente');
 
-  return `
+  const estadoSolicitud = miasAbiertas.length ? `
+    <div style="margin-top:10px;background:rgba(255,255,255,.16);border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.35;">
+      ${miaRecibida
+        ? `✅ <b>Tu solicitud fue recibida</b> — Técnico ${escapeHtml(miaRecibida.atendido_por||'')} · ${escapeHtml(miaRecibida.maquina)}`
+        : `● <b>Solicitud enviada</b>, aún sin recibir — hace ${minutosDesde(miaEsperando.creado_en)} min · ${escapeHtml(miaEsperando.maquina)}`}
+      <button class="btn ghost small" style="margin-left:8px;padding:3px 9px;" onclick="abrirVista('foco')">Ver</button>
+    </div>` : '';
+
+  const cabecera = `
   <div class="card" style="background:linear-gradient(135deg,#1a7a3c,#146030);color:#fff;">
     <h2 style="color:#fff;">${info.emoji} ${info.label}</h2>
     <div style="font-size:13px;opacity:.9;">
       ${escapeHtml(STATE.plantaHoy)} · ${esOperador?('UBT '+escapeHtml(STATE.ubtElegida)+' · '+escapeHtml(STATE.usuario.maquina)):(misUbtsProd().join(', ')||'sin UBT')} · Turno ${STATE.usuario?.turno||''}
     </div>
-  </div>
+    ${estadoSolicitud}
+  </div>`;
+
+  /* El Operador ve directamente su hoja de TPM del mes.
+     El foco ya está en el menú principal, por eso aquí no se repite. */
+  if(esOperador){
+    return cabecera + await renderVistaTpm({embed:true});
+  }
+
+  return `
+  ${cabecera}
 
   <div class="card">
     <h2>📋 TPM diario — ${diaHoy()}</h2>
@@ -1782,7 +1800,8 @@ function cambiarTurnoLlenado(){
 }
 
 /* ---------- Vista de la hoja TPM ---------- */
-async function renderVistaTpm(){
+async function renderVistaTpm(opts){
+  opts = opts || {};
   const planta = STATE.plantaHoy;
   const esOperador = esOperadorProd();
 
@@ -1792,9 +1811,10 @@ async function renderVistaTpm(){
   else if(STATE.rol === 'produccion') ubtsDisp = misUbtsProd();
   else ubtsDisp = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
 
+  const volver = opts.embed ? '' : `<div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>`;
+
   if(ubtsDisp.length === 0){
-    return `<div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
-      <div class="card"><h2>📋 TPM</h2><div class="empty">No tienes UBT asignadas en ${escapeHtml(planta||'')}.</div></div>`;
+    return `${volver}<div class="card"><h2>📋 TPM</h2><div class="empty">No tienes UBT asignadas en ${escapeHtml(planta||'')}.</div></div>`;
   }
 
   const sel = STATE.tpmSel || {};
@@ -1808,7 +1828,7 @@ async function renderVistaTpm(){
 
   /* El operador solo hace TPM si su máquina es de las que lo llevan */
   if(esOperador && !esMaquinaTpm(maqOperador)){
-    return `<div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+    return `${volver}
       <div class="card">
         <h2>📋 TPM diario</h2>
         <div style="background:#eef4f8;border-left:4px solid #0f3d5c;border-radius:8px;padding:12px;font-size:13.5px;">
@@ -1845,7 +1865,7 @@ async function renderVistaTpm(){
   const barraLlenado = tpmPuedeLlenar() ? renderBarraLlenadoTpm(esOperador) : '';
 
   return `
-  <div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+  ${volver}
   ${selectorMes}
   ${barraLlenado}
   <div id="tpm_hoja">${renderHojaTpm()}</div>`;
