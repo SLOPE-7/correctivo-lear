@@ -288,6 +288,12 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.8.0 = del foco al correctivo con las horas puestas solas, pantalla de pendientes de
+           firma para auditor, APQP y mantenimiento, columna Editar fuera de la impresión
+           y solo para mantenimiento, fecha simulada solo para el administrador
+   1.7.0 = material muestra solo el número de parte, limpieza de datos de prueba desde
+           administrador, alta de usuario con nombre y apellido amarrada al gafete,
+           el QR de la UBT ahora muestra correctivos y TPM
    1.6.2 = la hoja ya no se recorta en pantalla, se imprime al ancho de la página,
            casilla "Otros" ya no aparece doble, la foto quedó solo en Reportar
    1.6.1 = material con buscador del catálogo de refacciones y alta de refacción nueva,
@@ -310,7 +316,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.6.2';
+const APP_VERSION = '1.8.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -484,6 +490,7 @@ function ahora(){
   return d;
 }
 function ponerFechaPrueba(valor){
+  if(STATE.rol !== 'admin'){ showToast('⚠️ Solo el administrador puede cambiar la fecha'); return; }
   FECHA_PRUEBA = valor || '';
   try{
     if(FECHA_PRUEBA) localStorage.setItem('fecha_prueba', FECHA_PRUEBA);
@@ -493,6 +500,7 @@ function ponerFechaPrueba(valor){
   render();
 }
 function abrirFechaPrueba(){
+  if(STATE.rol !== 'admin'){ showToast('⚠️ Solo el administrador puede cambiar la fecha'); return; }
   const v = prompt('Fecha simulada para pruebas (AAAA-MM-DD).\nDeja vacío para volver a la fecha real:', FECHA_PRUEBA || todayISO());
   if(v === null) return;
   ponerFechaPrueba(v.trim());
@@ -867,6 +875,10 @@ async function render(){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVistaTpm()}</div>`;
     return;
   }
+  if(STATE.vista === 'pendientes_firma' && ['auditor','apqp','tecnico','supervisor'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderPendientesFirma()}</div>`;
+    return;
+  }
   if(STATE.vista === 'solicitudes' && STATE.rol==='tecnico'){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderSolicitudesTecnico()}</div>`;
     return;
@@ -925,7 +937,7 @@ async function render(){
   setTimeout(iniciarRecordatorios, 200);
   if(STATE.rol==='produccion') setTimeout(cargarZonaTpm, 120);
   if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
-  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); iniciarAutoBorrador(); }, 60);
+  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); aplicarDatosDeSolicitud(); iniciarAutoBorrador(); }, 60);
 }
 
 function renderTopbar(){
@@ -936,12 +948,12 @@ function renderTopbar(){
   const avisoPruebas = STATE.modoPruebas
     ? `<div style="background:#c77700;color:#fff;text-align:center;padding:5px;font-size:11.5px;font-weight:700;" class="no-print">
         🧪 MODO PRUEBAS — jornadas desactivadas
-        <button onclick="abrirFechaPrueba()" style="margin-left:8px;background:#fff;color:#c77700;border:none;border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px;cursor:pointer;">📅 Fecha simulada</button>
+        ${STATE.rol==='admin'?`<button onclick="abrirFechaPrueba()" style="margin-left:8px;background:#fff;color:#c77700;border:none;border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px;cursor:pointer;">📅 Fecha simulada</button>`:''}
       </div>` : '';
   const avisoFecha = FECHA_PRUEBA
     ? `<div style="background:#a13636;color:#fff;text-align:center;padding:5px;font-size:11.5px;font-weight:700;" class="no-print">
         ⚠️ Trabajando con FECHA SIMULADA ${escapeHtml(FECHA_PRUEBA)} — lo que guardes queda con esa fecha
-        <button onclick="ponerFechaPrueba('')" style="margin-left:8px;background:#fff;color:#a13636;border:none;border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px;cursor:pointer;">Quitar</button>
+        ${STATE.rol==='admin'?`<button onclick="ponerFechaPrueba('')" style="margin-left:8px;background:#fff;color:#a13636;border:none;border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px;cursor:pointer;">Quitar</button>`:''}
       </div>` : '';
   return avisoPruebas + avisoFecha + `<div class="topbar no-print">
     <div class="tb-left">
@@ -1051,6 +1063,7 @@ function renderMenuInicio(){
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
     T('','👁️','Ver correctivos y TPM','Por planta y UBT','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
+    T('ambar','✍️','Pendientes de firma','Lo que falta que firmen Calidad y APQP',"abrirVista('pendientes_firma')");
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='produccion'){
@@ -1063,7 +1076,8 @@ function renderMenuInicio(){
   else if(esAuditorTipo){
     T('rojo wide','👁️','Ver correctivos y TPM','Hojas de mis líneas','verCorrectivos()');
     T('','📋','Mis UBTs','Líneas asignadas','editarUbts()');
-    T('','🏠','Mi panel','Pendientes de firma','irAPanel()');
+    T('ambar wide','✍️','Pendientes de tu firma','Registros esperando que los firmes',"abrirVista('pendientes_firma')");
+    T('','🏠','Mi panel','Vista de hojas','irAPanel()');
     T('azul','🗓️','Hoja TPM',rol==='auditor'?'Revisar y firmar el mes':'Ver e imprimir','abrirTpm()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
@@ -1073,7 +1087,7 @@ function renderMenuInicio(){
     T('azul','📊','Análisis','Tiempo muerto y fallas',"abrirVista('analisis')");
     T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
-    T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
+    T('ambar','✍️','Pendientes de firma','Lo que falta de Calidad y APQP',"abrirVista('pendientes_firma')");
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
   else if(rol==='admin'){
@@ -1250,8 +1264,9 @@ function renderRolePicker(){
     </div>
     <div class="card" id="nombre_form" style="display:none;">
       <h2 id="nombre_form_title">Acceso</h2>
-      <div class="field"><label>Tu nombre</label><input id="nombre_input" placeholder="Escribe tu nombre" autocapitalize="words"></div>
-      <div class="field" id="gafete_wrap"><label>No. de Gafete</label><input id="gafete_login" placeholder="Tu número de gafete" inputmode="numeric"></div>
+      <div class="field"><label>Tu nombre y apellido</label><input id="nombre_input" placeholder="Ej. Sergio López" autocapitalize="words"></div>
+      <div class="field" id="gafete_wrap"><label>No. de Gafete o ID</label><input id="gafete_login" placeholder="Tu número de gafete" inputmode="numeric"></div>
+      <div id="gafete_error" style="display:none;background:#fdf1f1;border:1px solid #e9b7b7;color:#8a1f1f;border-radius:8px;padding:10px;font-size:12.5px;margin-bottom:10px;line-height:1.4;"></div>
       <div class="field" id="subrol_wrap" style="display:none;"><label>¿Qué puesto tienes?</label>
         <select id="subrol_login">
           ${Object.entries(SUBROLES_PROD).map(([k,r])=>`<option value="${k}">${r.emoji} ${r.label}</option>`).join('')}
@@ -1294,6 +1309,19 @@ function olvidarUsuario(){
   render();
 }
 
+/* Pide primer nombre y apellido: al menos dos palabras de 2 letras o más */
+function nombreCompletoValido(nombre){
+  const partes = (nombre||'').trim().split(/\s+/).filter(p => p.length >= 2);
+  return partes.length >= 2;
+}
+/* Busca si un gafete ya pertenece a alguien más */
+async function usuarioPorGafete(gafete){
+  try{
+    const r = await sbFetch('usuarios?gafete=eq.'+encodeURIComponent(gafete)+'&select=*&limit=1');
+    return (r && r[0]) ? r[0] : null;
+  }catch(e){ console.warn(e); return null; }
+}
+
 let rolSeleccionadoTemp = '';
 function elegirRol(rol){
   if(rol==='admin'){ STATE.rol = rol; STATE.nombre=''; STATE.adminOk=false; render(); return; }
@@ -1301,6 +1329,7 @@ function elegirRol(rol){
   document.getElementById('nombre_form_title').textContent = ROLES[rol].emoji + ' Acceso — ' + ROLES[rol].label;
   document.getElementById('gafete_wrap').style.display = (rol==='supervisor') ? 'none' : 'flex';
   document.getElementById('subrol_wrap').style.display = (rol==='produccion') ? 'flex' : 'none';
+  const av = document.getElementById('gafete_error'); if(av) av.style.display='none';
   document.getElementById('nombre_form').style.display = 'block';
   document.getElementById('nombre_form').scrollIntoView({behavior:'smooth'});
   document.getElementById('nombre_input').focus();
@@ -1316,6 +1345,12 @@ async function confirmarAcceso(){
   const esSupervisor = rolSeleccionadoTemp === 'supervisor';
 
   if(!nombre){ document.getElementById('nombre_input').style.borderColor='red'; return; }
+  /* Debe escribir al menos nombre y apellido */
+  if(!nombreCompletoValido(nombre)){
+    document.getElementById('nombre_input').style.borderColor='red';
+    showToast('⚠️ Escribe tu primer nombre y tu apellido');
+    return;
+  }
   if(!esSupervisor && !gafete){ document.getElementById('gafete_login').style.borderColor='red'; showToast('⚠️ Escribe tu No. de Gafete'); return; }
   if(codigo !== STATE.codes[rolSeleccionadoTemp]){ document.getElementById('codigo_error').style.display='block'; return; }
 
@@ -1323,6 +1358,35 @@ async function confirmarAcceso(){
 
   const existente = await getUsuario(nombre);
   if(existente && existente.bloqueado){ STATE.usuario = existente; render(); return; }
+
+  /* El usuario queda amarrado a su gafete: si no coincide, no entra */
+  if(existente && !esSupervisor && existente.gafete && existente.gafete !== '—' && existente.gafete !== gafete){
+    document.getElementById('gafete_login').style.borderColor='red';
+    const aviso = document.getElementById('gafete_error');
+    if(aviso){
+      aviso.innerHTML = `⚠️ El No. de Gafete no coincide con el registrado para <b>${escapeHtml(nombre)}</b>.<br>
+        Verifica tu número. Si de verdad es tuyo, pide al administrador que lo corrija.`;
+      aviso.style.display = 'block';
+    }
+    showToast('⚠️ El gafete no coincide con ese nombre');
+    return;
+  }
+
+  /* Y el gafete no puede estar usado por otra persona */
+  if(!existente && !esSupervisor && gafete){
+    const duenio = await usuarioPorGafete(gafete);
+    if(duenio){
+      const aviso = document.getElementById('gafete_error');
+      if(aviso){
+        aviso.innerHTML = `⚠️ Ese gafete ya está registrado a nombre de <b>${escapeHtml(duenio.nombre)}</b>.<br>
+          Si es un error, avisa al administrador.`;
+        aviso.style.display = 'block';
+      }
+      document.getElementById('gafete_login').style.borderColor='red';
+      showToast('⚠️ Ese gafete ya pertenece a otra persona');
+      return;
+    }
+  }
 
   if(existente){
     /* Ya estaba registrado: conservamos sus UBTs y solo actualizamos lo básico */
@@ -1470,6 +1534,7 @@ async function renderTecnico(){
           <label class="checkline" style="margin-bottom:0;"><input type="checkbox" id="f_extra"> ⏱️ Fue en tiempo extra</label>
         </div>
       </div>
+      <div id="aviso_solicitud" class="no-print" style="display:none;background:#fffdf5;border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;line-height:1.4;"></div>
       <div class="field"><label>No. Gafete</label><input id="f_gafete" value="${STATE.usuario?.gafete||''}"></div>
       <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas" oninput="buscarFallasSimilaresPronto()"></textarea></div>
       <div id="fallas_similares" style="display:none;background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;"></div>
@@ -1690,6 +1755,25 @@ async function renderVistaUbtPublica(){
   delUbt.forEach(s => (porMaquina[s.maquina] ??= []).push(s));
   const totalRegistros = delUbt.reduce((a,s)=>a+((s.filas||[]).length),0);
 
+  /* Hojas de TPM del mes en curso, solo lectura */
+  let tpmHtml = '';
+  for(const maq of MAQ_TPM){
+    const regs = await getTpmMes(planta, ubt, maq, ahora().getFullYear(), ahora().getMonth());
+    if(regs.length === 0) continue;
+    const marcas = {};
+    regs.forEach(r => { marcas[`${r.fecha}|${letraTurno(r.turno)}`] = r; });
+    const claveF = claveFirmasTpm(planta, ubt, maq, ahora().getFullYear(), ahora().getMonth());
+    const guardado = await getFirmasTpm(claveF);
+    const imgs = await getImagenesTpm(maq);
+    tpmCtx = { planta, ubt, maquina:maq, anio:ahora().getFullYear(), mes:ahora().getMonth(),
+               marcas, firmas:guardado, comentarios:guardado.comentarios||'', imgs, claveF };
+    tpmHtml += `<div class="card">
+      <h2>🗓️ TPM ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${MESES[ahora().getMonth()]} ${ahora().getFullYear()})</span></h2>
+      <div class="tpm-scroll">${renderHojaTpm()}</div>
+    </div>`;
+  }
+  tpmCtx = null;
+
   return `
   <div class="topbar no-print">
     <div class="tb-left">
@@ -1706,12 +1790,23 @@ async function renderVistaUbtPublica(){
     </div>
   </div>
   <div class="wrap">
-    ${delUbt.length===0 ? '<div class="card"><div class="empty">Todavía no hay correctivos registrados en esta UBT.</div></div>' :
-      Object.keys(porMaquina).sort().map(maq=>`
-        <div class="card">
-          <h2>⚙️ ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porMaquina[maq].length} hoja/s)</span></h2>
-          ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura', publico:true})}</div></div>`).join('')}
-        </div>`).join('')}
+    <div class="card no-print" style="padding:10px 12px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn small secondary" onclick="document.getElementById('bloque_correctivos').scrollIntoView({behavior:'smooth'})">📝 Correctivos</button>
+        <button class="btn small ghost" onclick="document.getElementById('bloque_tpm').scrollIntoView({behavior:'smooth'})">🗓️ TPM</button>
+      </div>
+    </div>
+    <div id="bloque_correctivos">
+      ${delUbt.length===0 ? '<div class="card"><div class="empty">Todavía no hay correctivos registrados en esta UBT.</div></div>' :
+        Object.keys(porMaquina).sort().map(maq=>`
+          <div class="card">
+            <h2>⚙️ ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porMaquina[maq].length} hoja/s)</span></h2>
+            ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura', publico:true})}</div></div>`).join('')}
+          </div>`).join('')}
+    </div>
+    <div id="bloque_tpm">
+      ${tpmHtml || '<div class="card"><div class="empty">Todavía no hay TPM registrado este mes en esta UBT.</div></div>'}
+    </div>
   </div>`;
 }
 
@@ -1857,6 +1952,7 @@ async function renderProduccion(){
     return cabecera + await renderVistaTpm({embed:true});
   }
 
+  /* El foco vive en la pantalla principal: aquí no se repite */
   return `
   ${cabecera}
 
@@ -1865,20 +1961,10 @@ async function renderProduccion(){
     <div id="tpm_zona"><div class="empty">Cargando...</div></div>
   </div>
 
-  <div class="card" style="text-align:center;">
-    <h2 style="justify-content:center;">💡 Foco de Mantenimiento</h2>
-    <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Solicita ayuda de un técnico para tu línea.</p>
-    <button onclick="abrirVista('foco')" style="background:${miaRecibida?'#1a7a3c':(miasAbiertas.length?'#e0b400':'#f0f2f4')};border:3px solid ${miaRecibida?'#146030':(miasAbiertas.length?'#c77700':'#d4d8dc')};border-radius:50%;width:120px;height:120px;font-size:52px;cursor:pointer;transition:.2s;box-shadow:${miasAbiertas.length?(miaRecibida?'0 0 26px #1a7a3c88':'0 0 26px #e0b40088'):'none'};">${miaRecibida?'🔧':'💡'}</button>
-    ${miasAbiertas.length ? `
-      <div style="margin-top:12px;display:inline-block;text-align:left;background:${miaRecibida?'#f4faf5':'#fffdf5'};border:1px solid ${miaRecibida?'#cfe3d4':'#f0c674'};border-radius:10px;padding:11px 14px;font-size:13px;max-width:420px;">
-        ${miaRecibida ? `<b style="color:#1a7a3c;">✓ Tu solicitud fue recibida</b><br>Técnico <b>${escapeHtml(miaRecibida.atendido_por||'')}</b> · UBT ${escapeHtml(miaRecibida.ubt_no)} · ${escapeHtml(miaRecibida.maquina)}`
-          : `<b style="color:#a16d07;">● Enviada, aún sin recibir</b><br>Hace ${minutosDesde(miaEsperando.creado_en)} min · UBT ${escapeHtml(miaEsperando.ubt_no)} · ${escapeHtml(miaEsperando.maquina)}`}
-        <div style="margin-top:7px;"><button class="btn ghost small" onclick="abrirVista('foco')">Ver detalle</button></div>
-      </div>`
-      : `<div style="margin-top:12px;font-size:13.5px;font-weight:700;color:${misPend.length?'#c77700':'var(--muted)'};">
-        ${misPend.length ? `${misPend.length} solicitud(es) activa(s) en tu planta` : 'Toca el foco para solicitar mantenimiento'}
-      </div>`}
-  </div>`;
+  ${misPend.length ? `<div class="card" style="font-size:13px;">
+    🔆 <b>${misPend.length}</b> solicitud(es) activa(s) en ${escapeHtml(STATE.plantaHoy)}
+    <button class="btn ghost small" style="margin-left:8px;" onclick="abrirVista('foco')">Ver</button>
+  </div>` : ''}`;
 }
 
 function misUbtsProd(){
@@ -2746,7 +2832,65 @@ function tarjetaSolicitud(s, esTecnico){
     ${s.nota?`<div style="font-size:13px;margin-top:8px;">${escapeHtml(s.nota)}</div>`:''}
     ${esTecnico && !atendida && !terminada ? `<button class="btn small" style="margin-top:10px;background:#e0b400;color:#1a1a1a;" onclick="atenderFoco('${s.id}')">💡 Recibir esta solicitud</button>` : ''}
     ${esTecnico && atendida ? `<button class="btn small secondary" style="margin-top:10px;" onclick="terminarFoco('${s.id}')">🏁 Marcar trabajo terminado</button>` : ''}
+    ${terminada && STATE.rol==='tecnico' ? `
+      <div style="margin-top:10px;border-top:1px dashed ${borde};padding-top:9px;">
+        <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">
+          ⏱️ Solicitado ${soloHora(s.creado_en)} · terminado ${soloHora(s.terminado_en)}
+        </div>
+        <button class="btn small" onclick="llenarCorrectivoDeSolicitud('${s.id}')">📝 Llenar correctivo de esta falla</button>
+      </div>` : ''}
   </div>`;
+}
+
+/* ---------- Del foco al correctivo, con las horas ya puestas ---------- */
+async function llenarCorrectivoDeSolicitud(id){
+  const todas = await listSolicitudes(false);
+  const s = todas.find(x=>x.id===id);
+  if(!s){ showToast('⚠️ No se encontró la solicitud'); return; }
+  if(!s.terminado_en){ showToast('⚠️ Primero marca el trabajo como terminado'); return; }
+
+  /* Estos datos se vacían en el formulario en cuanto se abre la hoja */
+  STATE.desdeSolicitud = {
+    id: s.id,
+    horaInicio: soloHoraInput(s.creado_en),
+    horaFinal:  soloHoraInput(s.terminado_en),
+    fecha: (s.terminado_en || s.creado_en).slice(0,10),
+    nota: s.nota || '',
+    solicitante: s.solicitante || ''
+  };
+
+  STATE.plantaHoy = s.planta;
+  STATE.vista = null;
+  showToast('Abriendo el correctivo de la UBT ' + s.ubt_no + '...');
+  await abrirPaginaAutomatica(s.planta, s.ubt_no, s.maquina, mesActual(), anioActual());
+}
+
+/* Hora en formato HH:MM, que es lo que pide el campo del formulario */
+function soloHoraInput(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+/* Vacía los datos del foco en el formulario del correctivo */
+function aplicarDatosDeSolicitud(){
+  const d = STATE.desdeSolicitud;
+  if(!d) return;
+  const set = (id,val)=>{ const el=document.getElementById(id); if(el && val) el.value = val; };
+  set('f_fecha', d.fecha);
+  set('f_hi', d.horaInicio);
+  set('f_hf', d.horaFinal);
+  const aviso = document.getElementById('aviso_solicitud');
+  if(aviso){
+    aviso.innerHTML = `💡 Correctivo de la solicitud de <b>${escapeHtml(d.solicitante)}</b>.
+      Las horas ya vienen puestas: <b>${escapeHtml(d.horaInicio)}</b> (cuando pidió ayuda) a <b>${escapeHtml(d.horaFinal)}</b> (cuando terminaste).
+      Puedes cambiarlas si hace falta.
+      ${d.nota?`<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #f0c674;color:var(--muted);">
+        Lo que anotó el operador, solo como referencia: "${escapeHtml(d.nota)}"</div>`:''}`;
+    aviso.style.display = 'block';
+  }
+  validarTiempos();
+  STATE.desdeSolicitud = null;
 }
 
 async function encenderFoco(){
@@ -3031,6 +3175,82 @@ async function renderSolicitudesTecnico(){
   </div>`;
 }
 
+/* ---------- Pendientes de firma ---------- */
+async function renderPendientesFirma(){
+  const rol = STATE.rol;
+  const misUbts = (STATE.usuario?.ubtsPorPlanta || {});
+  const esTecnico = rol==='tecnico' || rol==='supervisor';
+
+  /* Auditor y APQP: solo sus líneas. Mantenimiento: su planta del día. */
+  let hojas;
+  if(esTecnico){
+    hojas = await listSheets({ planta: STATE.plantaHoy });
+    hojas = hojas.filter(h => h.planta === STATE.plantaHoy);
+  } else {
+    const plantas = Object.keys(misUbts);
+    hojas = await listSheets();
+    hojas = hojas.filter(h => (misUbts[h.planta]||[]).includes(h.ubtNo));
+    if(plantas.length === 0) hojas = [];
+  }
+
+  const pend = [];
+  hojas.forEach(h => (h.filas||[]).forEach(f => {
+    const faltaAuditor = f.estadoAuditor === 'pendiente';
+    const faltaApqp    = f.estadoAPQP === 'pendiente';
+    if(rol === 'auditor' && !faltaAuditor) return;
+    if(rol === 'apqp'    && !faltaApqp)    return;
+    if(esTecnico){
+      if(!faltaAuditor && !faltaApqp) return;
+      if(rol === 'tecnico' && slug(f.tecnico||'') !== slug(STATE.nombre)) return;  /* solo lo suyo */
+    }
+    pend.push({ hoja:h, fila:f, faltaAuditor, faltaApqp });
+  }));
+
+  pend.sort((a,b) => String(b.fila.creadoEn||'').localeCompare(String(a.fila.creadoEn||'')));
+
+  const titulo = esTecnico
+    ? '✍️ Pendientes de firma de Calidad y APQP'
+    : '✍️ Pendientes de tu firma';
+  const explica = esTecnico
+    ? (rol==='tecnico'
+        ? 'Registros tuyos que todavía no firma el Auditor de Calidad o APQP.'
+        : 'Registros de tu planta que siguen sin la firma de Calidad o de APQP.')
+    : `Registros de tus líneas que esperan tu firma${rol==='apqp'?' de APQP':''}.`;
+
+  return `
+  <div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+  <div class="card">
+    <h2>${titulo} (${pend.length})</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">${explica}</p>
+    ${pend.length === 0
+      ? '<div class="empty">No hay nada pendiente. ✓</div>'
+      : pend.map(p => tarjetaPendienteFirma(p, rol)).join('')}
+  </div>`;
+}
+
+function tarjetaPendienteFirma(p, rol){
+  const f = p.fila, h = p.hoja;
+  const faltantes = [];
+  if(p.faltaAuditor) faltantes.push('Auditor de Calidad');
+  if(p.faltaApqp)    faltantes.push('APQP');
+  const puedeFirmarAqui = (rol==='auditor' && p.faltaAuditor) || (rol==='apqp' && p.faltaApqp);
+  return `
+  <div style="border:1px solid #f0c674;border-left:5px solid #e0b400;background:#fffdf5;border-radius:10px;padding:13px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <b style="font-size:13.5px;">📍 UBT ${escapeHtml(h.ubtNo)} · ${escapeHtml(h.maquina)}</b>
+      <span class="badge-est esp">Falta: ${faltantes.join(' y ')}</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+      ${escapeHtml(h.planta)} · ${escapeHtml(f.fecha||'')} · Técnico ${escapeHtml(f.tecnico||'')}
+    </div>
+    <div style="font-size:13px;margin-top:7px;"><b>Falla:</b> ${escapeHtml(f.sintomas||'')}</div>
+    ${f.acciones?`<div style="font-size:12.5px;margin-top:3px;"><b>Acción:</b> ${escapeHtml(f.acciones)}</div>`:''}
+    ${puedeFirmarAqui ? `<button class="btn small" style="margin-top:10px;" onclick="${rol==='auditor'
+        ? `firmarAuditor('${escArg(h.key)}','${escArg(f.id)}')`
+        : `firmarApqp('${escArg(h.key)}','${escArg(f.id)}')`}">✍️ Firmar este registro</button>` : ''}
+  </div>`;
+}
+
 /* ---------- Ver correctivos (solo lectura) ---------- */
 let sheetsCacheVerTodo = [];
 async function renderVerCorrectivos(){
@@ -3156,6 +3376,14 @@ function imprimirHoja(elId, sheetKey){
     titulo = `Correctivo-${target.dataset.maquina}-${target.dataset.ubt}-${target.dataset.mes}-${target.dataset.anio}`;
   }
 
+  /* Se imprime una copia limpia: sin botones y sin la columna Editar */
+  const copia = contenido.cloneNode(true);
+  copia.querySelectorAll('.no-print').forEach(el=>el.remove());
+  const colEdit = copia.querySelector('col.col-edit');
+  if(colEdit) colEdit.remove();
+  const tabla = copia.querySelector('table.sheet-table');
+  if(tabla) tabla.classList.remove('con-editar');
+
   const estilos = [...document.querySelectorAll('style')].map(x=>x.outerHTML).join('');
   const ventana = window.open('', '_blank', 'width=1100,height=800');
   if(!ventana){ showToast('⚠️ El navegador bloqueó la ventana. Permite ventanas emergentes.'); return; }
@@ -3169,7 +3397,7 @@ function imprimirHoja(elId, sheetKey){
       .sheet-page{border:none;box-shadow:none;width:100%;min-height:0;margin:0;padding:0;transform:none;}
       .lear-logo{width:150px;}
       table.sheet-table tbody tr{height:58px;}
-    </style></head><body>${contenido.outerHTML}</body></html>`);
+    </style></head><body>${copia.outerHTML}</body></html>`);
   ventana.document.close();
   ventana.focus();
   setTimeout(()=>{ ventana.print(); }, 400);
@@ -3239,8 +3467,9 @@ async function guardarEdicion(sk, fid){
 function renderSheetVisual(sheet, opts){
   if(!sheet) return '<div class="empty">Hoja no encontrada.</div>';
   opts = opts || {};
-  /* En la vista pública (QR pegado en la línea) no se muestra el botón de editar */
-  const permiteEditar = !opts.publico;
+  /* Editar solo lo ven Mantenimiento, Supervisor de Mantenimiento y Administrador,
+     y nunca en la vista pública del QR */
+  const permiteEditar = !opts.publico && ['tecnico','supervisor','admin'].includes(STATE.rol);
   const filas = sheet.filas || [];
 
   /* Casillas de máquina, en el mismo acomodo que el papel: 4 columnas de 3 renglones */
@@ -3279,7 +3508,7 @@ function renderSheetVisual(sheet, opts){
       <td>${escapeHtml(f.horaFinal||'')}</td>
       <td class="left">${escapeHtml(f.sintomas)}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:7.5px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td>
       <td class="left">${escapeHtml(f.acciones)}</td>
-      <td class="left">${escapeHtml(f.material)}${f.numeroParte?`<br><span style="font-size:7.5px;"><b>P/N:</b> ${escapeHtml(f.numeroParte)}</span>`:''}</td>
+      <td class="left">${escapeHtml(f.numeroParte || f.material || '')}</td>
       <td>${f.firmaTecnicoImg?`<img src="${f.firmaTecnicoImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.tecnico)}</span>`:escapeHtml(f.tecnico)}</td>
       <td>${auditorCell}</td>
       <td>${f.seMovioModulo?'Sí':'No'}</td>
@@ -3521,6 +3750,22 @@ async function renderAdmin(){
     </div>
     <button class="btn ghost" id="bs_btn" onclick="borrarSeleccionCorrectivos()">🗑️ Borrar la selección</button>
   </div>
+  <div class="card" style="border:2px solid #a13636;">
+    <h2 style="color:#a13636;">🧹 Limpiar datos de prueba</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Deja el sistema en cero antes de arrancar en piso. Elige qué borrar. <b>Nunca se borra</b> el catálogo de números de parte, ni la configuración de plantas, ni los turnos, ni los códigos de acceso.</p>
+    <label class="checkline"><input type="checkbox" id="lp_hojas" checked> 📝 Todas las hojas de correctivo</label>
+    <label class="checkline"><input type="checkbox" id="lp_tpm" checked> 🗓️ Todos los registros y firmas de TPM</label>
+    <label class="checkline"><input type="checkbox" id="lp_solicitudes" checked> 💡 Todas las solicitudes (focos)</label>
+    <label class="checkline"><input type="checkbox" id="lp_reportes" checked> 📢 Todos los reportes al supervisor</label>
+    <label class="checkline"><input type="checkbox" id="lp_usuarios"> 👥 Los usuarios registrados (tendrán que darse de alta otra vez)</label>
+    <div class="field" style="margin-top:10px;">
+      <label>Para confirmar, escribe <b>BORRAR</b></label>
+      <input id="lp_confirmar" placeholder="BORRAR" autocomplete="off">
+    </div>
+    <button class="btn" style="background:#a13636;" onclick="limpiarDatosPrueba()">🧹 Borrar lo seleccionado</button>
+    <div id="lp_resultado" style="font-size:12.5px;margin-top:10px;"></div>
+    <p style="font-size:11.5px;color:var(--muted);margin-top:8px;">Descarga primero el respaldo de arriba si quieres conservar algo. Esto no se puede deshacer.</p>
+  </div>
   <div class="card">
     <h2>📱 Códigos QR de acceso</h2>
     <div class="field">
@@ -3533,7 +3778,7 @@ async function renderAdmin(){
   </div>
   <div class="card">
     <h2>📋 QR de consulta por UBT</h2>
-    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Genera un QR que abre directo todos los correctivos de una línea, de todas sus máquinas. Ideal para pegarlo físicamente en la UBT.</p>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Genera un QR que abre directo los <b>correctivos y las hojas de TPM</b> de una línea, de todas sus máquinas. Ideal para pegarlo físicamente en la UBT.</p>
     <div class="row2">
       <div class="field"><label>Planta</label>
         <select id="qr_ubt_planta" onchange="actualizarUbtsQR()">${PLANTA_NOMBRES.map(p=>`<option>${p}</option>`).join('')}</select>
@@ -4024,6 +4269,57 @@ async function borrarSeleccionCorrectivos(){
   render();
 }
 
+/* ---------- Limpieza de datos de prueba ---------- */
+async function limpiarDatosPrueba(){
+  const conf = document.getElementById('lp_confirmar').value.trim().toUpperCase();
+  if(conf !== 'BORRAR'){ showToast('⚠️ Escribe BORRAR para confirmar'); return; }
+
+  const tareas = [];
+  if(document.getElementById('lp_hojas').checked)       tareas.push(['hojas',        'Hojas de correctivo']);
+  if(document.getElementById('lp_tpm').checked)         tareas.push(['tpm_registros','Registros de TPM']);
+  if(document.getElementById('lp_solicitudes').checked) tareas.push(['solicitudes',  'Solicitudes']);
+  if(document.getElementById('lp_reportes').checked)    tareas.push(['reportes',     'Reportes al supervisor']);
+  if(document.getElementById('lp_usuarios').checked)    tareas.push(['usuarios',     'Usuarios']);
+  const borrarFirmasTpm = document.getElementById('lp_tpm').checked;
+
+  if(tareas.length === 0 && !borrarFirmasTpm){ showToast('⚠️ No elegiste nada'); return; }
+  if(!confirm('Se va a borrar:\n\n' + tareas.map(t=>'• '+t[1]).join('\n') + '\n\n¿Seguro? No se puede deshacer.')) return;
+
+  const salida = document.getElementById('lp_resultado');
+  if(salida) salida.innerHTML = 'Borrando...';
+  const hechos = [];
+
+  for(const [tabla, etiqueta] of tareas){
+    try{
+      /* El filtro "distinto de imposible" hace que aplique a todos los renglones */
+      await sbFetch(tabla + '?id=not.is.null', { method:'DELETE', prefer:'return=minimal' });
+      hechos.push('✅ ' + etiqueta);
+    }catch(err){
+      /* Algunas tablas usan otra llave primaria */
+      try{
+        const alterno = (tabla==='usuarios') ? 'nombre' : (tabla==='hojas' ? 'clave' : (tabla==='refacciones' ? 'numero_parte' : 'id'));
+        await sbFetch(tabla + '?' + alterno + '=not.is.null', { method:'DELETE', prefer:'return=minimal' });
+        hechos.push('✅ ' + etiqueta);
+      }catch(e2){
+        hechos.push('⚠️ ' + etiqueta + ': ' + (e2.message||e2));
+      }
+    }
+  }
+
+  /* Las firmas y comentarios del TPM viven en la tabla config */
+  if(borrarFirmasTpm){
+    try{
+      await sbFetch('config?clave=like.tpmfirma:*', { method:'DELETE', prefer:'return=minimal' });
+      hechos.push('✅ Firmas y comentarios de TPM');
+    }catch(err){ hechos.push('⚠️ Firmas de TPM: ' + (err.message||err)); }
+  }
+
+  document.getElementById('lp_confirmar').value = '';
+  if(salida) salida.innerHTML = hechos.join('<br>');
+  cacheAnalisis = null; cacheHojasFallas = null;
+  showToast('Limpieza terminada');
+}
+
 function cambiarAlcanceBorrado(){
   const alcance = document.getElementById('bs_alcance').value;
   document.getElementById('bs_wrap_ubt').style.display = (alcance==='ubt'||alcance==='maquina') ? 'flex' : 'none';
@@ -4380,7 +4676,7 @@ function pintarRefaccionesElegidas(){
   }
   const mat = document.getElementById('f_material');
   if(mat){
-    const texto = refaccionesElegidas.map(r=> r.descripcion ? `${r.descripcion} (${r.numero_parte})` : r.numero_parte).join(', ');
+    const texto = refaccionesElegidas.map(r=> r.numero_parte).join(', ');
     const manual = (mat.dataset.manual || '').trim();
     mat.value = [texto, manual].filter(Boolean).join(manual && texto ? ' · ' : '');
   }
