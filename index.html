@@ -159,7 +159,48 @@
   .edit-btn{background:#555;margin-top:2px;}
   .pie-marca{text-align:center;font-size:10.5px;color:#9aa1a9;opacity:.65;padding:14px 10px 20px;letter-spacing:.3px;user-select:none;}
   .pie-marca b{font-weight:700;color:#8a9099;}
+  /* --- Hoja TPM (formato de piso) --- */
+  .tpm-hoja{background:#fff;border:1px solid #333;padding:12px 14px;font-family:Calibri,'Segoe UI',Arial,sans-serif;color:#000;overflow-x:auto;}
+  .tpm-rev{text-align:right;font-size:9px;margin-bottom:10px;}
+  .tpm-cabecera{display:grid;grid-template-columns:1fr 2fr 1fr;align-items:end;gap:8px;}
+  .tpm-planta{font-size:12px;font-weight:800;}
+  .tpm-titulo{text-align:center;font-size:14px;font-weight:800;line-height:1.25;}
+  .tpm-titulo span{font-size:13px;}
+  .tpm-ubic{font-size:10.5px;margin-top:6px;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;}
+  .tpm-ubic u{font-weight:800;font-size:11.5px;}
+  .tpm-mes{margin-left:auto;}
+  .tpm-instr{font-size:8.5px;margin:6px 0 4px;line-height:1.35;}
+  .tpm-herr{text-align:center;margin-top:2px;}
+  table.tpm-table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  table.tpm-table th, table.tpm-table td{border:1px solid #333;font-size:8px;text-align:center;vertical-align:middle;padding:1px;}
+  table.tpm-table th{background:#f2f2f2;font-weight:700;}
+  .tpm-sub{width:62px;font-size:8.5px;font-weight:600;}
+  .tpm-ayuda{width:86px;}
+  .tpm-ayuda img{max-width:82px;max-height:52px;display:block;margin:2px auto;}
+  .tpm-sinfoto{font-size:16px;opacity:.28;}
+  .tpm-act{width:150px;font-size:8px;line-height:1.25;padding:3px 4px !important;}
+  .tpm-turno{width:20px;font-weight:700;}
+  .tpm-sem{font-size:8px;}
+  .tpm-dia{width:15px;font-size:7.5px;}
+  .tpm-cel{height:22px;font-size:10px;font-weight:800;color:#146030;}
+  .tpm-vacio{background:#f4f5f6;}
+  .tpm-hoy{background:#fff8dc;}
+  .tpm-chk-cel{width:13px;height:13px;margin:0;cursor:pointer;}
+  .tpm-nota{font-size:8.5px;margin-top:5px;}
+  .tpm-nota b{font-weight:800;}
+  .tpm-coment{font-size:8.5px;margin-top:8px;display:flex;align-items:flex-end;gap:6px;}
+  .tpm-linea{flex:1;border-bottom:1px solid #333;height:12px;}
+  .tpm-firmas{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px;}
+  .tpm-firma{text-align:center;}
+  .tpm-firma-cont{min-height:34px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;}
+  .tpm-firma-img{max-height:26px;max-width:110px;}
+  .tpm-firma-nom{font-size:9px;font-weight:700;}
+  .tpm-firma-fec{font-size:7.5px;color:#555;}
+  .tpm-firma-linea{border-top:1px solid #333;margin:2px 6px 3px;}
+  .tpm-firma-tit{font-size:8px;}
+  @media(max-width:760px){ .tpm-hoja{padding:8px;} table.tpm-table{min-width:900px;} }
   .no-print{}
+  #barra_conexion{position:sticky;top:0;z-index:60;background:#a13636;color:#fff;text-align:center;padding:8px 12px;font-size:12.5px;font-weight:700;line-height:1.3;}
   @media print{
     .no-print{display:none !important;}
     body.printing-single .wrap > *:not(.print-target){display:none !important;}
@@ -167,6 +208,7 @@
 </style>
 </head>
 <body>
+<div id="barra_conexion" class="no-print" style="display:none;">📴 Sin conexión — lo que escribas se guarda en este dispositivo, pero no se enviará hasta que vuelva el internet.</div>
 <div id="app"></div>
 <div class="pie-marca no-print">Creado por <b>KAL7</b>, Claude · <span id="pie_version"></span></div>
 
@@ -182,6 +224,9 @@ const checklistGroups = [
   ["Otros"]
 ];
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+/* El mes y el año NUNCA deben ir fijos: se toman del día en que se usa la app */
+function mesActual(){ return MESES[new Date().getMonth()]; }
+function anioActual(){ return String(new Date().getFullYear()); }
 const MAX_FILAS_POR_HOJA = 7;
 
 /* ---------- Versión de la aplicación ----------
@@ -189,8 +234,14 @@ const MAX_FILAS_POR_HOJA = 7;
    1.0.0 = versión base
    1.1.0 = UBT/máquina fijas para operador, pantalla principal de mosaicos, estado del foco
    1.2.0 = tiempo muerto por planta del técnico (colapsado), botón volver a inicio, marca de agua
-   1.3.0 = registro/historial de solicitudes de mantenimiento con tiempos de respuesta  */
-const APP_VERSION = '1.3.0';
+   1.3.0 = registro/historial de solicitudes de mantenimiento con tiempos de respuesta
+   1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
+           sin recordatorios duplicados, sin doble guardado, avisos apilados,
+           aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
+           solo se puede marcar el día en curso, guardado automático, firma del auditor
+           y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
+const APP_VERSION = '1.5.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -296,9 +347,12 @@ function pintarVersion(){
 }
 function slug(s){ return (s||'').toString().toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
 function uid(){ return 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+/* Fecha local: con toISOString, después de las 18:00 en México ya marcaba el día siguiente */
+function todayISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function nowLabel(){ return new Date().toLocaleString('es-MX'); }
-function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=(s===0?'0':(s||'')); return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+/* Escapa un texto para meterlo dentro de un onclick="fn('...')" */
+function escArg(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
 function sheetKey(planta,ubt,maquina,mes,anio,pagina){ return `sheet:${slug(planta)}--${slug(ubt)}--${slug(maquina)}--${slug(mes)}--${slug(anio)}--p${pagina}`; }
 
 /* ---------- Conexión a Supabase ---------- */
@@ -306,6 +360,9 @@ const SUPABASE_URL = 'https://pddugjlydcggotamstav.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_n0METrGffoJXnnbBPBJ1AA_pjIz69I9';
 
 async function sbFetch(path, options={}){
+  if(typeof navigator !== 'undefined' && navigator.onLine === false){
+    throw new Error('Sin conexión a internet. Revisa el WiFi y vuelve a intentar.');
+  }
   const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
     ...options,
     headers: {
@@ -475,9 +532,16 @@ async function saveSheet(key, sheet){
     })
   });
 }
-async function listSheets(){
+/* Trae las hojas. Si se le pasa {planta, ubts}, el filtrado lo hace el servidor:
+   así el auditor ya no descarga TODAS las hojas de todas las plantas con sus fotos. */
+async function listSheets(filtro){
   try{
-    const r = await sbFetch('hojas?select=*');
+    let q = 'hojas?select=*';
+    if(filtro && filtro.planta) q += '&planta=eq.' + encodeURIComponent(filtro.planta);
+    if(filtro && filtro.ubts && filtro.ubts.length){
+      q += '&ubt_no=in.(' + filtro.ubts.map(u=>'"'+String(u).replace(/"/g,'')+'"').join(',') + ')';
+    }
+    const r = await sbFetch(q);
     return (r||[]).map(h=>({ key:h.clave, planta:h.planta, ubtNo:h.ubt_no, maquina:h.maquina, mes:h.mes, anio:h.anio, pagina:h.pagina, filas:h.filas||[] }));
   }catch(e){ console.warn(e); return []; }
 }
@@ -486,8 +550,18 @@ async function listSheets(){
 let STATE = { rol:'', nombre:'', usuario:null, codes:null, plantasCfg:null, editandoUbts:false, plantaHoy:null, ubtElegida:null };
 
 function showToast(msg){
+  const previos = document.querySelectorAll('.toast');
+  /* Nunca más de 3 avisos a la vez y se apilan hacia arriba, no encimados */
+  if(previos.length >= 3) previos[0].remove();
   const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
-  document.body.appendChild(t); setTimeout(()=>t.remove(), 2200);
+  document.body.appendChild(t);
+  reacomodarToasts();
+  setTimeout(()=>{ t.remove(); reacomodarToasts(); }, 2600);
+}
+function reacomodarToasts(){
+  [...document.querySelectorAll('.toast')].reverse().forEach((el,i)=>{
+    el.style.bottom = (20 + i*52) + 'px';
+  });
 }
 function getParams(){
   const p = new URLSearchParams(window.location.search);
@@ -544,17 +618,18 @@ async function render(){
 
   if(STATE.nombre && !STATE.usuario){
     STATE.usuario = await getUsuario(STATE.nombre);
-    if(STATE.usuario && STATE.usuario.bloqueado){
-      app.innerHTML = `<div class="wrap"><div class="card" style="text-align:center;">
-        <h2 style="justify-content:center;">🚫 Acceso bloqueado</h2>
-        <p style="font-size:14px;color:var(--muted);">Tu usuario fue bloqueado por el administrador.<br>Contacta a tu supervisor si crees que es un error.</p>
-        <button class="btn ghost" onclick="cambiarRol()">Volver al inicio</button>
-      </div></div>`;
-      return;
-    }
     if(STATE.usuario && pushDisponible() && Notification.permission === 'granted'){
       activarNotificaciones(true);
     }
+  }
+  /* El bloqueo se revisa SIEMPRE (también al entrar con el atajo de usuario guardado) */
+  if(STATE.usuario && STATE.usuario.bloqueado){
+    app.innerHTML = `<div class="wrap"><div class="card" style="text-align:center;">
+      <h2 style="justify-content:center;">🚫 Acceso bloqueado</h2>
+      <p style="font-size:14px;color:var(--muted);">Tu usuario fue bloqueado por el administrador.<br>Contacta a tu supervisor si crees que es un error.</p>
+      <button class="btn ghost" onclick="cambiarRol()">Volver al inicio</button>
+    </div></div>`;
+    return;
   }
   const esAuditorTipo = STATE.rol==='auditor' || STATE.rol==='apqp';
   if(STATE.nombre && !STATE.usuario){
@@ -612,8 +687,8 @@ async function render(){
     iniciarAutoRefrescoFoco();
     return;
   }
-  if(STATE.vista === 'tpm_suplencia' && STATE.rol==='produccion'){
-    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderTpmSuplencia()}</div>`;
+  if(STATE.vista === 'tpm' && ['produccion','auditor','supervisor','admin'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVistaTpm()}</div>`;
     return;
   }
   if(STATE.vista === 'solicitudes' && STATE.rol==='tecnico'){
@@ -674,7 +749,7 @@ async function render(){
   setTimeout(iniciarRecordatorios, 200);
   if(STATE.rol==='produccion') setTimeout(cargarZonaTpm, 120);
   if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
-  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); }, 60);
+  if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); iniciarAutoBorrador(); }, 60);
 }
 
 function renderTopbar(){
@@ -688,7 +763,7 @@ function renderTopbar(){
       <span class="tb-logo">🔧</span>
       <div>
         <div class="tb-title">Correctivo · Lear</div>
-        <div class="tb-sub">${ROLES[STATE.rol]?.emoji||''} ${ROLES[STATE.rol]?.label||STATE.rol}${STATE.nombre?(' · '+STATE.nombre):''}${STATE.usuario?.gafete?(' · '+STATE.usuario.gafete):''}${STATE.plantaHoy?(' · '+STATE.plantaHoy):''}${STATE.usuario?.turno?(' · '+STATE.usuario.turno+(STATE.usuario.extraFin?' +extra':'')):''}</div>
+        <div class="tb-sub">${ROLES[STATE.rol]?.emoji||''} ${escapeHtml(ROLES[STATE.rol]?.label||STATE.rol)}${STATE.nombre?(' · '+escapeHtml(STATE.nombre)):''}${STATE.usuario?.gafete?(' · '+escapeHtml(STATE.usuario.gafete)):''}${STATE.plantaHoy?(' · '+escapeHtml(STATE.plantaHoy)):''}${STATE.usuario?.turno?(' · '+escapeHtml(STATE.usuario.turno)+(STATE.usuario.extraFin?' +extra':'')):''}</div>
       </div>
     </div>
     <div class="tb-actions">
@@ -723,10 +798,16 @@ function guardarBorradorRegistro(){
   let hayAlgo = false;
   ids.forEach(id=>{ const el=document.getElementById(id); if(el){ b[id]=el.value; if(['f_sintomas','f_acciones','f_material'].includes(id) && el.value.trim()) hayAlgo=true; } });
   chk.forEach(id=>{ const el=document.getElementById(id); if(el) b[id]=el.checked; });
-  if(hayAlgo){ b.__foto = fotoTemp || ''; STATE.borradorRegistro = b; }
+  if(hayAlgo){
+    b.__foto = fotoTemp || '';
+    STATE.borradorRegistro = b;
+    /* La copia del dispositivo va sin la foto: ocupa mucho y llena el almacenamiento */
+    const sinFoto = { ...b }; delete sinFoto.__foto;
+    guardarBorradorLocal(sinFoto);
+  }
 }
 function restaurarBorradorRegistro(){
-  const b = STATE.borradorRegistro;
+  const b = STATE.borradorRegistro || leerBorradorLocal();
   if(!b) return;
   Object.entries(b).forEach(([id,val])=>{
     if(id.startsWith('__')) return;
@@ -743,6 +824,7 @@ function restaurarBorradorRegistro(){
   validarTiempos();
   showToast('✓ Se recuperó lo que tenías escrito');
   STATE.borradorRegistro = null;
+  borrarBorradorLocal();
 }
 
 function abrirVista(v){
@@ -795,6 +877,7 @@ function renderMenuInicio(){
   else if(rol==='produccion'){
     T('verde wide','💡','Solicitar mantenimiento','Encender el foco de tu línea',"abrirVista('foco')");
     T('rojo','📋','TPM diario',esOperador?'Llenar mi checklist':'Estado de mis líneas','irAPanel()');
+    T('azul','🗓️','Hoja TPM del mes','Formato completo e imprimir','abrirTpm()');
     if(infoSub?.multiUbt) T('','📌','Mis UBTs','Líneas asignadas','editarUbts()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
@@ -802,6 +885,7 @@ function renderMenuInicio(){
     T('rojo wide','👁️','Ver correctivos','Hojas de mis líneas','verCorrectivos()');
     T('','📋','Mis UBTs','Líneas asignadas','editarUbts()');
     T('','🏠','Mi panel','Pendientes de firma','irAPanel()');
+    if(rol==='auditor') T('azul','🗓️','Hoja TPM','Revisar y firmar el mes','abrirTpm()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='supervisor'){
@@ -897,7 +981,7 @@ async function toggleCola(key){
 }
 
 async function agregarUbtACola(planta, ubt){
-  const todas = await listSheets();
+  const todas = await listSheets({planta, ubts:[ubt]});
   const delUbt = todas.filter(s=>s.planta===planta && s.ubtNo===ubt);
   let nuevos = 0;
   delUbt.forEach(s=>{ if(!enCola(s.key)){ colaImpresion.push(s); nuevos++; } });
@@ -1004,6 +1088,8 @@ async function entrarGuardado(){
   if(!g) return;
   STATE.rol = g.rol; STATE.nombre = g.nombre;
   STATE.usuario = await getUsuario(g.nombre);
+  /* Un usuario bloqueado por el administrador NO puede entrar por el atajo */
+  if(STATE.usuario && STATE.usuario.bloqueado){ STATE.vista = null; render(); return; }
   if(!STATE.usuario){
     /* Ya no existe en la base (lo borró el admin): lo recreamos con lo guardado */
     STATE.usuario = { nombre:g.nombre, rol:g.rol, gafete:g.gafete||'—', ubtsPorPlanta:{}, bloqueado:false };
@@ -1153,13 +1239,19 @@ async function renderTecnico(){
       <h2>UBT ${STATE.ubtElegida} — Máquina y mes</h2>
       <div class="field"><label>Máquina / Estación</label><select id="s_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
       <div class="row2">
-        <div class="field"><label>Mes</label><select id="s_mes">${MESES.map(m=>`<option ${m==='Agosto'?'selected':''}>${m}</option>`).join('')}</select></div>
-        <div class="field"><label>Año</label><input id="s_anio" value="2026"></div>
+        <div class="field"><label>Mes</label><select id="s_mes">${MESES.map(m=>`<option ${m===mesActual()?'selected':''}>${m}</option>`).join('')}</select></div>
+        <div class="field"><label>Año</label><input id="s_anio" value="${anioActual()}" inputmode="numeric"></div>
       </div>
       <button class="btn" onclick="abrirHoja()">Abrir / Crear hoja</button>
     </div>`;
   }
   const sheet = await getSheet(sheetActivaKey);
+  if(!sheet){
+    sheetActivaKey = null;
+    return `<div class="card"><h2>⚠️ Hoja no disponible</h2>
+      <p style="font-size:13.5px;color:var(--muted);">Esa hoja ya no existe (pudo borrarla el administrador). Vuelve a elegir la máquina.</p>
+      <button class="btn" onclick="render()">Volver</button></div>`;
+  }
   sheet.key = sheetActivaKey;
   const llena = (sheet.filas||[]).length >= MAX_FILAS_POR_HOJA;
   return `
@@ -1179,7 +1271,7 @@ async function renderTecnico(){
       <div id="aviso_tiempo" style="display:none;font-size:12.5px;padding:8px 10px;border-radius:8px;margin-bottom:10px;"></div>
       <div class="row2">
         <div class="field"><label>Turno</label>
-          <select id="f_turno">
+          <select id="f_turno" onchange="this.dataset.manual='1'">
             <option value="TA">Turno A (06:00-14:50)</option>
             <option value="TB">Turno B (14:50-23:15)</option>
             <option value="TC">Turno C (23:15-06:00)</option>
@@ -1190,7 +1282,7 @@ async function renderTecnico(){
         </div>
       </div>
       <div class="field"><label>No. Gafete</label><input id="f_gafete" value="${STATE.usuario?.gafete||''}"></div>
-      <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas" oninput="buscarFallasSimilares()"></textarea></div>
+      <div class="field"><label>Síntomas / Fallas</label><textarea id="f_sintomas" oninput="buscarFallasSimilaresPronto()"></textarea></div>
       <div id="fallas_similares" style="display:none;background:#fff7e6;border:1px solid #f0c674;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12.5px;"></div>
       <div class="field"><label>Acciones Correctivas</label><textarea id="f_acciones"></textarea></div>
       <div class="field"><label>Material utilizado en modificación</label><textarea id="f_material"></textarea></div>
@@ -1209,7 +1301,7 @@ async function renderTecnico(){
       <label class="checkline"><input type="checkbox" id="f_movio"> Se movió módulo de posición</label>
       <label class="checkline"><input type="checkbox" id="f_verifico"> Se verificó módulo quede en cuadrante especificado</label>
       <label class="checkline"><input type="checkbox" id="f_solicitar_apqp"> 📩 Solicitar firma de APQP (le da acceso a este registro)</label>
-      <button class="btn" onclick="agregarFila()">Guardar registro y notificar</button>
+      <button class="btn" id="btn_guardar_fila" onclick="agregarFila()">Guardar registro y notificar</button>
       <button class="btn ghost" style="margin-top:8px;" onclick="abrirVista('reportar')">📢 ¿Necesitas reportar algo al Supervisor? (opcional)</button>
       `}
     </div>
@@ -1221,7 +1313,8 @@ async function renderTecnico(){
 
 async function abrirPaginaAutomatica(planta,ubt,maquina,mes,anio){
   let pagina = 1;
-  while(true){
+  const MAX_PAGINAS = 60;   /* candado de seguridad: nunca un ciclo infinito */
+  while(pagina <= MAX_PAGINAS){
     const key = sheetKey(planta,ubt,maquina,mes,anio,pagina);
     let sheet = await getSheet(key);
     if(!sheet){ sheet = { planta, ubtNo:ubt, maquina, mes, anio, pagina, filas: [] }; await saveSheet(key, sheet); }
@@ -1232,6 +1325,7 @@ async function abrirPaginaAutomatica(planta,ubt,maquina,mes,anio){
     }
     pagina++;
   }
+  showToast('⚠️ Demasiadas páginas en esta máquina. Avisa al administrador.');
 }
 async function abrirHoja(){
   const maquina = document.getElementById('s_maquina').value;
@@ -1246,12 +1340,21 @@ async function siguientePagina(){
   render();
 }
 
+let guardandoFila = false;
 async function agregarFila(){
+  if(guardandoFila) return;                       /* evita registros duplicados por doble toque */
   const sintomas = document.getElementById('f_sintomas').value.trim();
   if(!sintomas){ showToast('⚠️ Escribe los Síntomas/Fallas'); return; }
-  const sheet = await getSheet(sheetActivaKey);
-  if((sheet.filas||[]).length >= MAX_FILAS_POR_HOJA){ showToast('⚠️ Esta hoja ya está llena'); render(); return; }
   if(!validarTiempos()){ showToast('⚠️ Revisa las horas antes de guardar'); return; }
+
+  const btn = document.getElementById('btn_guardar_fila');
+  guardandoFila = true;
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; btn.style.opacity = '.6'; }
+  const liberar = ()=>{ guardandoFila = false; if(btn){ btn.disabled=false; btn.textContent='Guardar registro y notificar'; btn.style.opacity='1'; } };
+
+  const sheet = await getSheet(sheetActivaKey);
+  if(!sheet){ liberar(); showToast('⚠️ La hoja ya no existe'); sheetActivaKey=null; render(); return; }
+  if((sheet.filas||[]).length >= MAX_FILAS_POR_HOJA){ liberar(); showToast('⚠️ Esta hoja ya está llena'); render(); return; }
   const solicitarApqp = document.getElementById('f_solicitar_apqp').checked;
   const hi = document.getElementById('f_hi').value;
   const hf = document.getElementById('f_hf').value;
@@ -1283,9 +1386,11 @@ async function agregarFila(){
   };
   sheet.filas.push(fila);
   try{ await saveSheet(sheetActivaKey, sheet); }
-  catch(err){ showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
+  catch(err){ liberar(); showToast('⚠️ No se pudo guardar: ' + (err.message||String(err))); return; }
+  liberar();
   if(numeroParte) registrarRefaccion(numeroParte, parteDesc);
   fotoTemp = null; cacheHojasFallas = null;
+  STATE.borradorRegistro = null; borrarBorradorLocal();
 
   /* Notificar al auditor de calidad asignado a este UBT */
   const auditores = await destinatariosPara('auditor', sheet.planta, sheet.ubtNo);
@@ -1315,7 +1420,7 @@ async function agregarFila(){
 /* ---------- AUDITOR ---------- */
 async function renderAuditor(){
   const misUbts = (STATE.usuario?.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
-  const sheets = (await listSheets()).filter(s => s.planta===STATE.plantaHoy && misUbts.includes(s.ubtNo));
+  const sheets = (await listSheets({planta: STATE.plantaHoy, ubts: misUbts})).filter(s => s.planta===STATE.plantaHoy && misUbts.includes(s.ubtNo));
   const pendientesFilas = [];
   sheets.forEach(s => (s.filas||[]).forEach(f => { if(f.estadoAuditor==='pendiente') pendientesFilas.push({s,f}); }));
   const sheetsConPendientes = sheets.filter(s => (s.filas||[]).some(f=>f.estadoAuditor==='pendiente'));
@@ -1350,7 +1455,7 @@ async function firmarAuditor(sheetKeyStr, filaId){
 /* ---------- APQP ---------- */
 async function renderApqp(){
   const misUbts = (STATE.usuario?.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
-  const sheets = (await listSheets()).filter(s => s.planta===STATE.plantaHoy && misUbts.includes(s.ubtNo));
+  const sheets = (await listSheets({planta: STATE.plantaHoy, ubts: misUbts})).filter(s => s.planta===STATE.plantaHoy && misUbts.includes(s.ubtNo));
   const pendientesFilas = [];
   sheets.forEach(s => (s.filas||[]).forEach(f => { if(f.estadoAPQP==='pendiente') pendientesFilas.push({s,f}); }));
   const sheetsConPendientes = sheets.filter(s => (s.filas||[]).some(f=>f.estadoAPQP==='pendiente'));
@@ -1385,7 +1490,7 @@ async function firmarApqp(sheetKeyStr, filaId){
 /* ---------- Vista pública de una UBT (acceso por QR, solo lectura) ---------- */
 async function renderVistaUbtPublica(){
   const { planta, ubt } = STATE.modoVerUbt;
-  const todas = await listSheets();
+  const todas = await listSheets({planta, ubts:[ubt]});
   const delUbt = todas.filter(s => s.planta===planta && s.ubtNo===ubt);
   const porMaquina = {};
   delUbt.forEach(s => (porMaquina[s.maquina] ??= []).push(s));
@@ -1411,7 +1516,7 @@ async function renderVistaUbtPublica(){
       Object.keys(porMaquina).sort().map(maq=>`
         <div class="card">
           <h2>⚙️ ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porMaquina[maq].length} hoja/s)</span></h2>
-          ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s,{role:'lectura'})}</div>`).join('')}
+          ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap">${renderSheetVisual(s,{role:'lectura', publico:true})}</div>`).join('')}
         </div>`).join('')}
   </div>`;
 }
@@ -1424,7 +1529,7 @@ function salirVistaUbt(){
 
 async function imprimirUbtPublica(){
   const { planta, ubt } = STATE.modoVerUbt;
-  const todas = await listSheets();
+  const todas = await listSheets({planta, ubts:[ubt]});
   const delUbt = todas.filter(s => s.planta===planta && s.ubtNo===ubt);
   if(delUbt.length===0){ showToast('⚠️ No hay hojas que imprimir'); return; }
   colaImpresion = delUbt;
@@ -1487,8 +1592,8 @@ async function listTpmDelDia(planta, ubts){
 async function listSolicitudes(soloPendientes){
   try{
     const q = soloPendientes
-      ? 'solicitudes?estado=eq.pendiente&select=*&order=creado_en.asc'
-      : 'solicitudes?select=*&order=creado_en.desc';
+      ? 'solicitudes?estado=eq.pendiente&select=*&order=creado_en.asc&limit=200'
+      : 'solicitudes?select=*&order=creado_en.desc&limit=300';
     return await sbFetch(q) || [];
   }catch(e){ return []; }
 }
@@ -1576,27 +1681,462 @@ async function guardarMaquinaOperador(){
   render();
 }
 
-/* ---------- TPM ---------- */
+/* ---------- TPM (formato mensual estilo hoja de piso) ---------- */
+/* El TPM solo aplica a estas máquinas */
+const MAQ_TPM = ["Prueba Eléctrica","Pre-Eléctrica","Sistema de Navegación","Torques"];
+function esMaquinaTpm(m){ return MAQ_TPM.includes(m); }
+
+/* El formato imprime turnos A y B; si el usuario es de turno C se agrega su fila */
+function letraTurno(t){ return String(t||'TA').replace('T','').toUpperCase(); }
+function fechaLocalISO(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+/* Acomoda los días hábiles del mes en semanas de L a V, como el formato de papel */
+function mapaMesTpm(anio, mesIdx){
+  const totalDias = new Date(anio, mesIdx+1, 0).getDate();
+  const semanas = [];
+  let sem = 0, iniciado = false;
+  for(let d=1; d<=totalDias; d++){
+    const f = new Date(anio, mesIdx, d);
+    const wd = (f.getDay()+6)%7;          /* 0 = lunes ... 6 = domingo */
+    if(wd > 4) continue;                  /* el formato solo tiene L a V */
+    if(wd === 0 && iniciado) sem++;       /* cada lunes empieza otra semana */
+    iniciado = true;
+    if(!semanas[sem]) semanas[sem] = [null,null,null,null,null];
+    semanas[sem][wd] = fechaLocalISO(f);
+  }
+  while(semanas.length < 5) semanas.push([null,null,null,null,null]);
+  for(let i=0;i<semanas.length;i++) if(!semanas[i]) semanas[i]=[null,null,null,null,null];
+  return semanas;
+}
+
+/* ---------- Datos del mes ---------- */
+async function getTpmMes(planta, ubt, maquina, anio, mesIdx){
+  const desde = fechaLocalISO(new Date(anio, mesIdx, 1));
+  const hasta = fechaLocalISO(new Date(anio, mesIdx+1, 0));
+  try{
+    const q = `tpm_registros?fecha=gte.${desde}&fecha=lte.${hasta}` +
+      `&planta=eq.${encodeURIComponent(planta)}&ubt_no=eq.${encodeURIComponent(ubt)}` +
+      `&maquina=eq.${encodeURIComponent(maquina)}&select=*`;
+    return await sbFetch(q) || [];
+  }catch(e){ console.warn(e); return []; }
+}
+
+/* ---------- Firmas del mes (se guardan en la tabla config) ---------- */
+function claveFirmasTpm(planta, ubt, maquina, anio, mesIdx){
+  return `tpmfirma:${slug(planta)}--${slug(ubt)}--${slug(maquina)}--${anio}-${String(mesIdx+1).padStart(2,'0')}`;
+}
+async function getFirmasTpm(clave){
+  try{
+    const r = await sbFetch('config?clave=eq.'+encodeURIComponent(clave)+'&select=valor');
+    return (r && r[0]) ? (r[0].valor||{}) : {};
+  }catch(e){ return {}; }
+}
+async function saveFirmasTpm(clave, valor){
+  await sbFetch('config?on_conflict=clave', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave, valor, actualizado_en:new Date().toISOString() })
+  });
+}
+
+/* ---------- Estado de la hoja abierta ---------- */
+let tpmCtx = null;        /* { planta, ubt, maquina, anio, mes, marcas, firmas, regs } */
+let tpmLlenado = null;    /* { turno:'A', operador:'Nombre' } quién está marcando */
+let tGuardaTpm = null;
+
+function tpmPuedeLlenar(){
+  if(STATE.rol !== 'produccion') return false;
+  const sub = STATE.usuario?.subrol || 'operador';
+  return !!SUBROLES_PROD[sub]?.puedeLlenarTpm;
+}
+
+/* Abre la hoja mensual */
+function abrirTpm(ubt, maquina){
+  const hoy = new Date();
+  STATE.tpmSel = {
+    ubt: ubt || STATE.tpmSel?.ubt || '',
+    maquina: maquina || STATE.tpmSel?.maquina || '',
+    anio: STATE.tpmSel?.anio ?? hoy.getFullYear(),
+    mes: STATE.tpmSel?.mes ?? hoy.getMonth()
+  };
+  STATE.vista = 'tpm';
+  render();
+}
+function cambiarTpmSel(){
+  const u = document.getElementById('tpm_ubt'), m = document.getElementById('tpm_maquina');
+  const me = document.getElementById('tpm_mes'), an = document.getElementById('tpm_anio');
+  STATE.tpmSel = {
+    ubt: u ? u.value : STATE.tpmSel.ubt,
+    maquina: m ? m.value : STATE.tpmSel.maquina,
+    mes: me ? Number(me.value) : STATE.tpmSel.mes,
+    anio: an ? Number(an.value) : STATE.tpmSel.anio
+  };
+  render();
+}
+function cambiarTurnoLlenado(){
+  const t = document.getElementById('tpm_turno_llenado');
+  const o = document.getElementById('tpm_operador_llenado');
+  if(t) tpmLlenado.turno = t.value;
+  if(o) tpmLlenado.operador = o.value.trim();
+  render();
+}
+
+/* ---------- Vista de la hoja TPM ---------- */
+async function renderVistaTpm(){
+  const planta = STATE.plantaHoy;
+  const esOperador = esOperadorProd();
+
+  /* UBTs y máquinas disponibles según el rol */
+  let ubtsDisp;
+  if(esOperador) ubtsDisp = [STATE.ubtElegida].filter(Boolean);
+  else if(STATE.rol === 'produccion') ubtsDisp = misUbtsProd();
+  else ubtsDisp = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+
+  if(ubtsDisp.length === 0){
+    return `<div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+      <div class="card"><h2>📋 TPM</h2><div class="empty">No tienes UBT asignadas en ${escapeHtml(planta||'')}.</div></div>`;
+  }
+
+  const sel = STATE.tpmSel || {};
+  if(!ubtsDisp.includes(sel.ubt)) sel.ubt = ubtsDisp[0];
+  const maqOperador = STATE.usuario?.maquina || '';
+  if(esOperador) sel.maquina = maqOperador;
+  if(!MAQ_TPM.includes(sel.maquina)) sel.maquina = esOperador ? maqOperador : MAQ_TPM[0];
+  if(sel.mes === undefined || sel.mes === null) sel.mes = new Date().getMonth();
+  if(!sel.anio) sel.anio = new Date().getFullYear();
+  STATE.tpmSel = sel;
+
+  /* El operador solo hace TPM si su máquina es de las que lo llevan */
+  if(esOperador && !esMaquinaTpm(maqOperador)){
+    return `<div class="card"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+      <div class="card">
+        <h2>📋 TPM diario</h2>
+        <div style="background:#eef4f8;border-left:4px solid #0f3d5c;border-radius:8px;padding:12px;font-size:13.5px;">
+          Tu máquina (<b>${escapeHtml(maqOperador||'sin asignar')}</b>) no lleva TPM autónomo.<br>
+          El TPM solo aplica para: ${MAQ_TPM.join(', ')}.
+        </div>
+      </div>`;
+  }
+
+  const regs = await getTpmMes(planta, sel.ubt, sel.maquina, sel.anio, sel.mes);
+  const marcas = {};
+  regs.forEach(r => { marcas[`${r.fecha}|${letraTurno(r.turno)}`] = r; });
+  const claveF = claveFirmasTpm(planta, sel.ubt, sel.maquina, sel.anio, sel.mes);
+  const firmas = await getFirmasTpm(claveF);
+  tpmCtx = { planta, ubt:sel.ubt, maquina:sel.maquina, anio:sel.anio, mes:sel.mes, marcas, firmas, claveF };
+
+  /* Quién marca hoy */
+  if(!tpmLlenado){
+    tpmLlenado = { turno: letraTurno(STATE.usuario?.turno), operador: esOperador ? STATE.nombre : '' };
+  }
+  if(esOperador){ tpmLlenado.turno = letraTurno(STATE.usuario?.turno); tpmLlenado.operador = STATE.nombre; }
+
+  const selectorMes = `
+    <div class="card no-print">
+      <div class="filters" style="margin-bottom:0;">
+        ${esOperador ? '' : `<select id="tpm_ubt" onchange="cambiarTpmSel()">${ubtsDisp.map(u=>`<option ${u===sel.ubt?'selected':''}>${escapeHtml(u)}</option>`).join('')}</select>
+        <select id="tpm_maquina" onchange="cambiarTpmSel()">${MAQ_TPM.map(m=>`<option ${m===sel.maquina?'selected':''}>${escapeHtml(m)}</option>`).join('')}</select>`}
+        <select id="tpm_mes" onchange="cambiarTpmSel()">${MESES.map((m,i)=>`<option value="${i}" ${i===sel.mes?'selected':''}>${m}</option>`).join('')}</select>
+        <select id="tpm_anio" onchange="cambiarTpmSel()">${[sel.anio-1, sel.anio, sel.anio+1].map(a=>`<option ${a===sel.anio?'selected':''}>${a}</option>`).join('')}</select>
+        <button class="btn small secondary" onclick="imprimirTpm()">🖨️ Imprimir</button>
+      </div>
+    </div>`;
+
+  const barraLlenado = tpmPuedeLlenar() ? renderBarraLlenadoTpm(esOperador) : '';
+
+  return `
+  <div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+  ${selectorMes}
+  ${barraLlenado}
+  <div id="tpm_hoja">${renderHojaTpm()}</div>`;
+}
+
+function renderBarraLlenadoTpm(esOperador){
+  const hoy = new Date();
+  const nombreDia = DIAS_SEMANA[hoy.getDay()];
+  const finDeSemana = hoy.getDay()===0 || hoy.getDay()===6;
+  if(finDeSemana){
+    return `<div class="card no-print" style="background:#eef1f4;">
+      <div style="font-size:13px;">📅 Hoy es <b>${nombreDia}</b>. El formato solo tiene columnas de lunes a viernes, así que hoy no hay casilla que marcar.</div>
+    </div>`;
+  }
+  return `<div class="card no-print" style="background:#fff7e6;border-color:#f0c674;">
+    <div style="font-size:13px;margin-bottom:8px;">
+      ✍️ Estás marcando la columna de <b>hoy ${nombreDia} ${new Date().getDate()}</b>.
+      Los demás días quedan bloqueados: cada día solo se puede llenar el que corresponde.
+    </div>
+    ${esOperador ? `<div style="font-size:12.5px;color:var(--muted);">Turno <b>${tpmLlenado.turno}</b> · Operador <b>${escapeHtml(STATE.nombre)}</b></div>` : `
+      <div class="row2">
+        <div class="field"><label>Turno que estás llenando</label>
+          <select id="tpm_turno_llenado" onchange="cambiarTurnoLlenado()">
+            ${['A','B','C'].map(l=>`<option ${l===tpmLlenado.turno?'selected':''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Operador (si llenas por ausencia)</label>
+          <input id="tpm_operador_llenado" value="${escapeHtml(tpmLlenado.operador||'')}" placeholder="Nombre del operador" onchange="cambiarTurnoLlenado()">
+        </div>
+      </div>`}
+    <div id="tpm_estado_guardado" style="font-size:12.5px;color:var(--muted);"></div>
+  </div>`;
+}
+
+/* ---------- La hoja tal cual el formato de papel ---------- */
+function renderHojaTpm(){
+  const c = tpmCtx;
+  if(!c) return '';
+  const semanas = mapaMesTpm(c.anio, c.mes);
+  const hoy = todayISO();
+  const puedeLlenar = tpmPuedeLlenar();
+  const letraEdit = tpmLlenado ? tpmLlenado.turno : '';
+
+  /* Turnos que se muestran: A y B como el formato, más C si hay datos o si el usuario es de turno C */
+  const letras = ['A','B'];
+  const hayC = Object.keys(c.marcas).some(k=>k.endsWith('|C')) || letraTurno(STATE.usuario?.turno)==='C';
+  if(hayC) letras.push('C');
+
+  const encabezadoSemanas = semanas.map((_,i)=>`<th colspan="5" class="tpm-sem">Semana ${i+1}</th>`).join('');
+  const encabezadoDias = semanas.map(()=>['L','M','M','J','V'].map(d=>`<th class="tpm-dia">${d}</th>`).join('')).join('');
+
+  const cuerpo = TPM_ACTIVIDADES.map(a=>{
+    return letras.map((letra,idx)=>{
+      const celdas = semanas.map(sem => sem.map(fecha=>{
+        if(!fecha) return `<td class="tpm-cel tpm-vacio"></td>`;
+        const reg = c.marcas[`${fecha}|${letra}`];
+        const marcado = !!(reg && reg.actividades && reg.actividades[a.id]);
+        const esHoy = fecha === hoy;
+        const editable = puedeLlenar && esHoy && letra === letraEdit;
+        if(editable){
+          return `<td class="tpm-cel tpm-hoy"><input type="checkbox" class="tpm-chk-cel" data-act="${a.id}" ${marcado?'checked':''} onchange="marcarCeldaTpm()"></td>`;
+        }
+        return `<td class="tpm-cel ${esHoy?'tpm-hoy':''}">${marcado?'✔':''}</td>`;
+      }).join('')).join('');
+      if(idx === 0){
+        return `<tr>
+          <td class="tpm-sub" rowspan="${letras.length}">${a.sub}</td>
+          <td class="tpm-ayuda" rowspan="${letras.length}">${a.img?`<img src="${a.img}" alt="">`:'<span class="tpm-sinfoto">📷</span>'}</td>
+          <td class="tpm-act" rowspan="${letras.length}">${a.texto}</td>
+          <td class="tpm-turno">${letra}</td>${celdas}
+        </tr>`;
+      }
+      return `<tr><td class="tpm-turno">${letra}</td>${celdas}</tr>`;
+    }).join('');
+  }).join('');
+
+  return `
+  <div class="tpm-hoja">
+    <div class="tpm-rev">Revision 1 (3/24/15)</div>
+    <div class="tpm-cabecera">
+      <div class="tpm-planta"><u>${escapeHtml(c.planta||'')}</u></div>
+      <div class="tpm-titulo">
+        MANTENIMIENTO PRODUCTIVO TOTAL<br>
+        <span>TPM Autónomo ${escapeHtml(c.maquina)}</span>
+      </div>
+      <div></div>
+    </div>
+    <div class="tpm-ubic">
+      <b>Ubicacion de la Maquina:</b> <u>UBT - ${escapeHtml(c.ubt)}</u> &nbsp;&nbsp; <u>${escapeHtml((c.maquina||'').toUpperCase())}</u>
+      <span class="tpm-mes"><b>MES: ${MESES[c.mes].toUpperCase()} ${c.anio}</b></span>
+    </div>
+    <div class="tpm-instr">
+      <b>Instrucciones:</b> Realizar las actividades que se listan en este formato y marcar con ( ✔ ) correspondiente tan pronto se complete la actividad descrita, esta tarea debe completarse en menos de <b>5 minutos</b>.
+      <div class="tpm-herr">Herramientas / materiales requeridas: Brochas de cerdas naturales, franela o toallas de taller, aceite lubricante Neumatico.</div>
+    </div>
+    <table class="tpm-table">
+      <thead>
+        <tr>
+          <th rowspan="2" class="tpm-sub">Sub-Ensamble</th>
+          <th rowspan="2" class="tpm-ayuda">Ayuda Visual</th>
+          <th rowspan="2" class="tpm-act">Actividad</th>
+          <th rowspan="2" class="tpm-turno">Turno</th>
+          ${encabezadoSemanas}
+        </tr>
+        <tr>${encabezadoDias}</tr>
+      </thead>
+      <tbody>${cuerpo}</tbody>
+    </table>
+    <div class="tpm-nota"><b>Nota:</b> Cualquier condicion anormal reportala a tu Lider de Grupo o a tu Supervisor.</div>
+    <div class="tpm-nota">Usar el reverso de este formato para reportar condiciones anormales de la maquina.</div>
+    <div class="tpm-coment">Comentarios: <span class="tpm-linea"></span></div>
+    <div class="tpm-firmas">
+      ${bloqueFirmaTpm('auditorA','AUDITOR / Turno A')}
+      ${bloqueFirmaTpm('auditorB','AUDITOR / Turno B')}
+      ${bloqueFirmaTpm('liderA','LIDER DE GRUPO / Turno A')}
+      ${bloqueFirmaTpm('liderB','LIDER DE GRUPO / Turno B')}
+    </div>
+  </div>`;
+}
+
+/* ¿Este usuario puede firmar este espacio? */
+function puedeFirmarTpm(campo){
+  const c = tpmCtx;
+  if(!c) return false;
+  const letra = campo.slice(-1);
+  const miLetra = letraTurno(STATE.usuario?.turno);
+  const misUbts = (STATE.usuario?.ubtsPorPlanta||{})[c.planta] || [];
+  const asignado = misUbts.includes(c.ubt);
+  if(campo.startsWith('auditor')){
+    return STATE.rol==='auditor' && asignado && letra===miLetra;
+  }
+  const sub = STATE.usuario?.subrol || '';
+  return STATE.rol==='produccion' && sub==='lider' && asignado && letra===miLetra;
+}
+
+function bloqueFirmaTpm(campo, etiqueta){
+  const f = (tpmCtx.firmas||{})[campo];
+  let contenido;
+  if(f && f.nombre){
+    contenido = `${f.img?`<img class="tpm-firma-img" src="${f.img}" alt="">`:''}
+      <div class="tpm-firma-nom">${escapeHtml(f.nombre)}</div>
+      <div class="tpm-firma-fec">${escapeHtml(f.fecha||'')}</div>`;
+  } else if(puedeFirmarTpm(campo)){
+    contenido = `<button class="btn small secondary no-print" onclick="firmarTpm('${campo}')">✍️ Firmar</button>`;
+  } else {
+    contenido = `<div class="tpm-firma-nom">&nbsp;</div>`;
+  }
+  return `<div class="tpm-firma"><div class="tpm-firma-cont">${contenido}</div><div class="tpm-firma-linea"></div><div class="tpm-firma-tit">${etiqueta}</div></div>`;
+}
+
+async function firmarTpm(campo){
+  if(!puedeFirmarTpm(campo)){ showToast('⚠️ Este espacio no te corresponde'); return; }
+  const c = tpmCtx;
+  const firmas = await getFirmasTpm(c.claveF);
+  if(firmas[campo] && firmas[campo].nombre){ showToast('Ese espacio ya está firmado'); render(); return; }
+  firmas[campo] = {
+    nombre: STATE.nombre,
+    gafete: STATE.usuario?.gafete || '',
+    fecha: nowLabel(),
+    img: (STATE.usuario?.modoFirma==='dibujo' && STATE.usuario?.firma) ? STATE.usuario.firma : ''
+  };
+  try{ await saveFirmasTpm(c.claveF, firmas); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+  showToast('Firmado ✓');
+  render();
+}
+
+/* ---------- Guardado automático de las casillas de hoy ---------- */
+function marcarCeldaTpm(){
+  const est = document.getElementById('tpm_estado_guardado');
+  if(est) est.textContent = 'Guardando...';
+  clearTimeout(tGuardaTpm);
+  tGuardaTpm = setTimeout(guardarTpmDeHoy, 700);
+}
+
+async function guardarTpmDeHoy(){
+  const c = tpmCtx;
+  if(!c) return;
+  const est = document.getElementById('tpm_estado_guardado');
+  const fecha = todayISO();
+  const letra = tpmLlenado.turno;
+  const chks = [...document.querySelectorAll('.tpm-chk-cel')];
+  if(chks.length === 0) return;
+
+  const actividades = {};
+  chks.forEach(ch => { actividades[ch.dataset.act] = ch.checked; });
+  const completo = TPM_ACTIVIDADES.every(a => actividades[a.id]);
+
+  const previo = c.marcas[`${fecha}|${letra}`];
+  const eraCompleto = !!(previo && previo.completo);
+
+  const reg = {
+    id: previo?.id || uid(),                 /* se reutiliza la fila del día: no se duplican registros */
+    fecha,
+    planta: c.planta,
+    ubt_no: c.ubt,
+    maquina: c.maquina,
+    turno: 'T' + letra,
+    operador: tpmLlenado.operador || STATE.nombre,
+    gafete: STATE.usuario?.gafete || '',
+    llenado_por: STATE.nombre,
+    rol_llenado: STATE.usuario?.subrol || '',
+    actividades,
+    completo,
+    creado_en: previo?.creado_en || new Date().toISOString()
+  };
+
+  try{ await saveTpm(reg); }
+  catch(err){ if(est) est.textContent = '⚠️ No se guardó: ' + (err.message||err); return; }
+
+  c.marcas[`${fecha}|${letra}`] = reg;
+  const hechas = TPM_ACTIVIDADES.filter(a=>actividades[a.id]).length;
+  if(est) est.innerHTML = `✓ Guardado — ${hechas} de ${TPM_ACTIVIDADES.length} actividades marcadas` +
+    (completo ? ' <b style="color:#1a7a3c;">· TPM del día completo</b>' : '');
+
+  /* Al completarse por primera vez se avisa al auditor y al líder de esa línea */
+  if(completo && !eraCompleto) await avisarTpmCompleto(reg);
+}
+
+async function avisarTpmCompleto(reg){
+  try{
+    const usuarios = await listUsuarios();
+    const destino = usuarios.filter(u =>
+      !u.bloqueado &&
+      (u.rol==='auditor' || (u.rol==='produccion' && u.subrol==='lider')) &&
+      ((u.ubtsPorPlanta||{})[reg.planta]||[]).includes(reg.ubt_no) &&
+      (!u.turno || letraTurno(u.turno) === letraTurno(reg.turno))
+    ).map(u=>slug(u.nombre));
+    if(destino.length === 0) return;
+    enviarNotificacion(destino, '📋 TPM diario terminado',
+      `${reg.operador} terminó el TPM de la UBT ${reg.ubt_no} (${reg.maquina}), turno ${letraTurno(reg.turno)}. Falta tu firma en la hoja del mes.`);
+  }catch(e){ console.warn(e); }
+}
+
+/* ---------- Imprimir la hoja ---------- */
+function imprimirTpm(){
+  const hoja = document.querySelector('#tpm_hoja .tpm-hoja');
+  if(!hoja){ showToast('⚠️ No se encontró la hoja'); return; }
+  const c = tpmCtx;
+  const titulo = `TPM-${c.maquina}-${c.ubt}-${MESES[c.mes]}-${c.anio}`;
+  const estilos = [...document.querySelectorAll('style')].map(x=>x.outerHTML).join('');
+  const v = window.open('', '_blank', 'width=1200,height=850');
+  if(!v){ showToast('⚠️ El navegador bloqueó la ventana emergente'); return; }
+  v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>${estilos}
+    <style>body{background:#fff;margin:0;padding:8px;} .no-print{display:none !important;}
+    @page{size:letter portrait;margin:7mm;}
+    .tpm-hoja{border:none;}
+    .tpm-chk-cel{display:none;}
+    </style></head><body>${hoja.outerHTML}</body></html>`);
+  v.document.close(); v.focus();
+  setTimeout(()=>v.print(), 500);
+}
+
+/* ---------- Resumen del TPM en la pantalla de Producción ---------- */
 async function cargarZonaTpm(){
   const zona = document.getElementById('tpm_zona');
   if(!zona) return;
   const sub = STATE.usuario?.subrol || 'operador';
-  const puedeLlenar = SUBROLES_PROD[sub]?.puedeLlenarTpm;
+  const esOperador = sub === 'operador';
 
-  if(sub === 'operador'){
-    const reg = await getTpmHoy(STATE.plantaHoy, STATE.ubtElegida, STATE.usuario.maquina, STATE.usuario.turno);
-    zona.innerHTML = renderFormularioTpm(reg, STATE.ubtElegida, STATE.usuario.maquina, true);
+  if(esOperador){
+    const maq = STATE.usuario?.maquina || '';
+    if(!esMaquinaTpm(maq)){
+      zona.innerHTML = `<div style="background:#eef4f8;border-left:4px solid #0f3d5c;border-radius:8px;padding:12px;font-size:13px;">
+        Tu máquina (<b>${escapeHtml(maq||'sin asignar')}</b>) no lleva TPM autónomo.<br>
+        Solo aplica para: ${MAQ_TPM.join(', ')}.</div>`;
+      return;
+    }
+    const reg = await getTpmHoy(STATE.plantaHoy, STATE.ubtElegida, maq, STATE.usuario.turno);
+    const hechas = reg?.actividades ? TPM_ACTIVIDADES.filter(a=>reg.actividades[a.id]).length : 0;
+    zona.innerHTML = `
+      <div style="background:${reg?.completo?'#e8f4ea':'#fff7e6'};border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:30px;">${reg?.completo?'✅':'📋'}</div>
+        <div style="font-weight:800;font-size:14.5px;margin-top:4px;">
+          ${reg?.completo ? 'TPM de hoy completado' : `${hechas} de ${TPM_ACTIVIDADES.length} actividades marcadas`}
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">⚙️ ${escapeHtml(maq)} · UBT ${escapeHtml(STATE.ubtElegida||'')} · ${diaHoy()}</div>
+        <button class="btn" style="margin-top:12px;" onclick="abrirTpm()">Abrir hoja del mes</button>
+      </div>`;
     return;
   }
 
-  /* Supervisor, Líder y Multifuncional: ven el estado de todas sus UBT */
+  /* Líder, Multifuncional y Supervisor de Producción: estado de sus líneas */
   const ubts = misUbtsProd();
   const regs = await listTpmDelDia(STATE.plantaHoy, ubts);
   const porUbt = {};
   regs.forEach(r => (porUbt[r.ubt_no] ??= []).push(r));
+  const puedeLlenar = SUBROLES_PROD[sub]?.puedeLlenarTpm;
 
   zona.innerHTML = `
-    <p style="font-size:12.5px;color:var(--muted);">Estado del TPM de hoy en tus líneas${puedeLlenar?' — como Líder puedes llenarlo en caso de ausencia.':' (solo lectura).'}</p>
+    <p style="font-size:12.5px;color:var(--muted);">TPM de hoy en tus líneas${puedeLlenar?' — como Líder puedes llenarlo por ausencia y firmar tu turno.':' (solo lectura).'}</p>
     ${ubts.length===0 ? '<div class="empty">No tienes UBT asignadas.</div>' :
       ubts.map(ub=>{
         const lista = porUbt[ub]||[];
@@ -1607,130 +2147,15 @@ async function cargarZonaTpm(){
           <div style="padding:10px 0 0 12px;">
             ${lista.length===0 ? '<div class="empty">Sin TPM registrado hoy en esta línea.</div>' :
               lista.map(r=>`<div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #eef0f2;font-size:13px;flex-wrap:wrap;gap:6px;">
-                <span>⚙️ ${escapeHtml(r.maquina)} <span style="color:var(--muted);font-size:11.5px;">(${escapeHtml(r.operador)})</span></span>
+                <span>⚙️ ${escapeHtml(r.maquina)} <span style="color:var(--muted);font-size:11.5px;">(${escapeHtml(r.operador)} · T${letraTurno(r.turno)})</span></span>
                 <span>${r.completo?'<span class="badge-est act">✓ Completo</span>':'<span class="badge-est bloq">● Incompleto</span>'}</span>
               </div>`).join('')}
-            ${puedeLlenar?`<button class="btn small secondary" style="margin-top:10px;" onclick="abrirTpmSuplencia('${ub.replace(/'/g,"\\\\'")}')">✍️ Llenar TPM por ausencia</button>`:''}
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+              ${MAQ_TPM.map(m=>`<button class="btn small ghost" onclick="abrirTpm('${escArg(ub)}','${escArg(m)}')">📋 ${escapeHtml(m)}</button>`).join('')}
+            </div>
           </div>
         </details>`;
       }).join('')}`;
-}
-
-function renderFormularioTpm(reg, ubt, maquina, esPropio){
-  const dia = diaHoy();
-  const marcas = (reg && reg.actividades) ? reg.actividades : {};
-  const yaCompleto = reg && reg.completo;
-
-  if(yaCompleto){
-    return `<div style="background:#e8f4ea;border-radius:10px;padding:16px;text-align:center;">
-      <div style="font-size:34px;">✅</div>
-      <div style="font-weight:800;font-size:15px;margin-top:6px;">TPM de hoy completado</div>
-      <div style="font-size:12.5px;color:var(--muted);margin-top:4px;">
-        ${escapeHtml(maquina)} · ${dia} · Llenado por ${escapeHtml(reg.llenado_por||reg.operador)}
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px;">Solo se puede llenar una vez al día.</div>
-    </div>`;
-  }
-
-  return `
-    <div style="background:#fff7e6;border-left:4px solid #e0b400;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12.5px;">
-      Marca cada actividad conforme la completes. Solo se puede marcar el día de hoy (<b>${dia}</b>).
-    </div>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">⚙️ ${escapeHtml(maquina)} · UBT ${escapeHtml(ubt)}</div>
-    ${TPM_ACTIVIDADES.map(a=>`
-      <label style="display:flex;gap:10px;align-items:flex-start;padding:11px;border:1px solid #e2e5e8;border-radius:9px;margin-bottom:8px;cursor:pointer;background:${marcas[a.id]?'#e8f4ea':'#fff'};">
-        <input type="checkbox" class="tpm-chk" data-act="${a.id}" ${marcas[a.id]?'checked':''} onchange="this.closest('label').style.background=this.checked?'#e8f4ea':'#fff';actualizarProgresoTpm();" style="margin-top:2px;width:20px;height:20px;">
-        <span>
-          <b style="font-size:13.5px;">${a.sub}</b>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${a.texto}</div>
-        </span>
-      </label>`).join('')}
-    <div id="tpm_progreso" style="font-size:13px;font-weight:700;margin:12px 0;text-align:center;"></div>
-    <button class="btn" onclick="guardarTpm('${ubt.replace(/'/g,"\\'")}','${maquina.replace(/'/g,"\\'")}')">✓ Finalizar TPM y notificar al Auditor</button>`;
-}
-
-function actualizarProgresoTpm(){
-  const chks = [...document.querySelectorAll('.tpm-chk')];
-  const hechas = chks.filter(c=>c.checked).length;
-  const el = document.getElementById('tpm_progreso');
-  if(el) el.innerHTML = `${hechas} de ${chks.length} actividades completadas` +
-    (hechas===chks.length ? ' <span style="color:#1a7a3c;">✓ Listo para finalizar</span>' : '');
-}
-
-async function guardarTpm(ubt, maquina, operadorNombre){
-  const chks = [...document.querySelectorAll('.tpm-chk')];
-  const actividades = {};
-  chks.forEach(c=>{ actividades[c.dataset.act] = c.checked; });
-  const todas = chks.every(c=>c.checked);
-  if(!todas && !confirm('No marcaste todas las actividades. ¿Guardar de todos modos como incompleto?')) return;
-
-  const esSuplencia = !!operadorNombre;
-  const reg = {
-    id: uid(),
-    fecha: todayISO(),
-    planta: STATE.plantaHoy,
-    ubt_no: ubt,
-    maquina: maquina,
-    turno: STATE.usuario.turno,
-    operador: esSuplencia ? operadorNombre : STATE.nombre,
-    gafete: STATE.usuario?.gafete || '',
-    llenado_por: STATE.nombre,
-    rol_llenado: STATE.usuario?.subrol || '',
-    actividades,
-    completo: todas,
-    creado_en: new Date().toISOString()
-  };
-  try{ await saveTpm(reg); }
-  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
-
-  /* Notificar al auditor de la misma línea y turno */
-  const usuarios = await listUsuarios();
-  const auditores = usuarios.filter(u =>
-    u.rol==='auditor' && !u.bloqueado &&
-    ((u.ubtsPorPlanta||{})[STATE.plantaHoy]||[]).includes(ubt) &&
-    (!u.turno || u.turno === STATE.usuario.turno)
-  ).map(u=>slug(u.nombre));
-
-  enviarNotificacion(
-    auditores,
-    '📋 TPM diario realizado',
-    `El Operador ${reg.operador} de la UBT ${ubt} realizó el TPM diario en la máquina ${maquina}.${esSuplencia?` (Llenado por ${STATE.nombre} por ausencia)`:''}`
-  );
-
-  showToast('✓ TPM registrado y auditor notificado');
-  render();
-}
-
-let tpmSuplenciaUbt = null;
-function abrirTpmSuplencia(ubt){
-  tpmSuplenciaUbt = ubt;
-  STATE.vista = 'tpm_suplencia';
-  render();
-}
-
-function renderTpmSuplencia(){
-  return `
-  <div class="card"><button class="btn ghost small" onclick="STATE.vista=null;render();">← Volver</button></div>
-  <div class="card">
-    <h2>✍️ Llenar TPM por ausencia — UBT ${escapeHtml(tpmSuplenciaUbt)}</h2>
-    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Quedará registrado que tú lo llenaste en lugar del operador.</p>
-    <div class="row2">
-      <div class="field"><label>Máquina</label><select id="sup_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
-      <div class="field"><label>Nombre del operador ausente</label><input id="sup_operador" placeholder="Nombre del operador"></div>
-    </div>
-    <div id="sup_form"></div>
-    <button class="btn secondary" onclick="prepararTpmSuplencia()">Continuar al checklist</button>
-  </div>`;
-}
-
-function prepararTpmSuplencia(){
-  const maq = document.getElementById('sup_maquina').value;
-  const op = document.getElementById('sup_operador').value.trim();
-  if(!op){ showToast('⚠️ Escribe el nombre del operador ausente'); return; }
-  const cont = document.getElementById('sup_form');
-  cont.innerHTML = `<div style="margin-top:14px;">${renderFormularioTpm(null, tpmSuplenciaUbt, maq, false)}</div>`;
-  cont.querySelector('button.btn').setAttribute('onclick', `guardarTpm('${tpmSuplenciaUbt.replace(/'/g,"\\'")}','${maq.replace(/'/g,"\\'")}','${op.replace(/'/g,"\\'")}')`);
-  actualizarProgresoTpm();
 }
 
 /* ---------- Foco de mantenimiento ---------- */
@@ -2127,26 +2552,43 @@ let intervaloRecordatorios = null;
 
 function iniciarRecordatorios(){
   if(intervaloRecordatorios) clearInterval(intervaloRecordatorios);
-  if(!['tecnico','supervisor','produccion'].includes(STATE.rol)) return;
+  /* Solo el técnico vigila los recordatorios: si lo hacen todos los roles,
+     cada dispositivo abierto manda su propia notificación y se duplican. */
+  if(STATE.rol !== 'tecnico') return;
   revisarRecordatorios();
   intervaloRecordatorios = setInterval(revisarRecordatorios, 60000);
+}
+
+/* Intenta "apartar" el recordatorio: solo actualiza si nadie más lo hizo ya.
+   Si otro dispositivo se adelantó, la respuesta viene vacía y no se notifica. */
+async function reclamarRecordatorio(id, corteISO){
+  try{
+    const r = await sbFetch(`solicitudes?id=eq.${encodeURIComponent(id)}&ultimo_recordatorio=lt.${encodeURIComponent(corteISO)}`, {
+      method:'PATCH', prefer:'return=representation',
+      body: JSON.stringify({ ultimo_recordatorio: new Date().toISOString() })
+    });
+    return Array.isArray(r) && r.length > 0;
+  }catch(e){ console.warn(e); return false; }
 }
 
 async function revisarRecordatorios(){
   try{
     const pendientes = await listSolicitudes(true);
-    const ahora = Date.now();
-    for(const s of pendientes){
-      const ultimo = new Date(s.ultimo_recordatorio || s.creado_en).getTime();
-      if(ahora - ultimo >= 5*60*1000){
-        const min = minutosDesde(s.creado_en);
-        const usuarios = await listUsuarios();
-        const tecnicos = usuarios.filter(u=>u.rol==='tecnico' && !u.bloqueado).map(u=>slug(u.nombre));
-        enviarNotificacion(tecnicos, '💡 Solicitud SIN ATENDER',
-          `Se solicitó mantenimiento en la UBT ${s.ubt_no} en la máquina ${s.maquina}, por ${s.solicitante}. Se solicitó hace ${min} minutos.`);
-        s.ultimo_recordatorio = new Date().toISOString();
-        await saveSolicitud(s);
-      }
+    if(pendientes.length === 0) return;
+    const corteISO = new Date(Date.now() - 5*60*1000).toISOString();
+    const vencidas = pendientes.filter(s => new Date(s.ultimo_recordatorio || s.creado_en).getTime() <= Date.parse(corteISO));
+    if(vencidas.length === 0) return;
+
+    const usuarios = await listUsuarios();          /* una sola vez, no dentro del ciclo */
+    const tecnicos = usuarios.filter(u=>u.rol==='tecnico' && !u.bloqueado).map(u=>slug(u.nombre));
+    if(tecnicos.length === 0) return;
+
+    for(const s of vencidas){
+      const apartado = await reclamarRecordatorio(s.id, corteISO);
+      if(!apartado) continue;
+      const min = minutosDesde(s.creado_en);
+      enviarNotificacion(tecnicos, '💡 Solicitud SIN ATENDER',
+        `Se solicitó mantenimiento en la UBT ${s.ubt_no} en la máquina ${s.maquina}, por ${s.solicitante}. Se solicitó hace ${min} minutos.`);
     }
   }catch(e){ console.warn(e); }
 }
@@ -2373,6 +2815,9 @@ async function guardarEdicion(sk, fid){
 /* ---------- Render visual de la hoja ---------- */
 function renderSheetVisual(sheet, opts){
   if(!sheet) return '<div class="empty">Hoja no encontrada.</div>';
+  opts = opts || {};
+  /* En la vista pública (QR pegado en la línea) no se muestra el botón de editar */
+  const permiteEditar = !opts.publico;
   const filas = sheet.filas || [];
   const rowMajor = [0,1,2].map(r => checklistGroups.map(col => col[r] || null));
   const flat = rowMajor.flat();
@@ -2381,7 +2826,7 @@ function renderSheetVisual(sheet, opts){
     if(item==='Otros') return `<span>Otros ☐ ____</span>`;
     return `<span class="${item===sheet.maquina?'on':'off'}">${item}</span>`;
   }).join('');
-  const filasHtml = filas.length===0 ? `<tr><td colspan="13" style="color:#999;">Sin registros todavía</td></tr>` :
+  const filasHtml = filas.length===0 ? `<tr><td colspan="${permiteEditar?13:12}" style="color:#999;">Sin registros todavía</td></tr>` :
     filas.map(f=>{
       const auditorCell = f.estadoAuditor==='firmado' ? (f.firmaAuditorImg ? `<img src="${f.firmaAuditorImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.firmaAuditorNombre)}</span>` : `<span class="firma-ok">${escapeHtml(f.firmaAuditorNombre)}</span>`)
         : (opts.role==='auditor' ? `<button class="firma-btn" onclick="firmarAuditor('${sheet.key}','${f.id}')">Firmar</button>` : 'Pendiente');
@@ -2392,14 +2837,14 @@ function renderSheetVisual(sheet, opts){
         <td>${f.fecha||''}</td><td>${escapeHtml(f.gafete)}</td><td>${f.horaInicio||''}</td><td>${f.horaFinal||''}</td>
         <td class="left">${escapeHtml(f.sintomas)}${f.minutosParo?`<br><span style="color:#0f3d5c;font-size:8px;">⏱️ ${formatoDuracion(f.minutosParo)}</span>`:''}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:8px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td><td class="left">${escapeHtml(f.acciones)}</td><td class="left">${escapeHtml(f.material)}${f.numeroParte?`<br><span style="font-size:8px;color:#0f3d5c;"><b>P/N:</b> ${escapeHtml(f.numeroParte)}</span>`:''}</td>
         <td>${f.firmaTecnicoImg?`<img src="${f.firmaTecnicoImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.tecnico)}</span>`:escapeHtml(f.tecnico)}</td><td>${auditorCell}</td><td>${f.seMovioModulo?'Sí':'No'}</td><td>${f.seVerificoModulo?'Sí':'No'}</td><td>${apqpCell}</td>
-        <td class="no-print">
+        ${permiteEditar ? `<td class="no-print">
           <button class="edit-btn" onclick="pedirClaveEditar('${sheet.key}','${f.id}')">✏️ Editar</button>
           <div class="pass-inline" id="editpass_${f.id}" style="display:none;">
             <input type="password" id="editpass_input_${f.id}" placeholder="Clave admin">
             <button onclick="validarClaveEditar('${f.id}')">OK</button>
           </div>
           <div class="edit-panel" id="editpanel_${f.id}" style="display:none;"></div>
-        </td>
+        </td>` : ''}
       </tr>`;
     }).join('');
   return `<div class="sheet-page">
@@ -2413,7 +2858,7 @@ function renderSheetVisual(sheet, opts){
       <div style="overflow-x:auto;"><table class="sheet-table"><thead><tr>
           <th>Fecha</th><th>No. Gafete</th><th>Hora Inicio</th><th>Hora Final</th><th>Síntomas/Fallas</th>
           <th>Acciones Correctivas</th><th>Material</th><th>Técnico</th><th>Auditor de Calidad</th>
-          <th>Se movió módulo</th><th>Se verificó cuadrante</th><th>APQP</th><th class="no-print">Editar</th>
+          <th>Se movió módulo</th><th>Se verificó cuadrante</th><th>APQP</th>${permiteEditar?'<th class="no-print">Editar</th>':''}
         </tr></thead><tbody>${filasHtml}</tbody></table></div>
     </div>`;
 }
@@ -3327,6 +3772,12 @@ function validarTiempos(){
 
 /* ---------- Fallas similares (detección de recurrencia) ---------- */
 let cacheHojasFallas = null;
+let tempFallas = null;
+/* Espera a que el técnico deje de escribir (medio segundo) antes de buscar */
+function buscarFallasSimilaresPronto(){
+  clearTimeout(tempFallas);
+  tempFallas = setTimeout(buscarFallasSimilares, 500);
+}
 async function buscarFallasSimilares(){
   const txtEl = document.getElementById('f_sintomas');
   const cont = document.getElementById('fallas_similares');
@@ -3335,13 +3786,15 @@ async function buscarFallasSimilares(){
   if(txt.length < 5){ cont.style.display='none'; return; }
 
   if(!cacheHojasFallas) cacheHojasFallas = await listSheets();
-  const sheet = await getSheet(sheetActivaKey);
-  if(!sheet) return;
+  /* Se usan los datos de la hoja abierta: no hace falta pedirla otra vez al servidor */
+  const p = sheetActivaParams;
+  if(!p) return;
 
   const palabras = txt.split(/\s+/).filter(w=>w.length>3);
+  if(palabras.length === 0){ cont.style.display='none'; return; }
   const coincidencias = [];
   cacheHojasFallas
-    .filter(h => h.planta===sheet.planta && h.ubtNo===sheet.ubtNo && h.maquina===sheet.maquina)
+    .filter(h => h.planta===p.planta && h.ubtNo===p.ubt && h.maquina===p.maquina)
     .forEach(h => (h.filas||[]).forEach(f=>{
       const sint = (f.sintomas||'').toLowerCase();
       const aciertos = palabras.filter(w=>sint.includes(w)).length;
@@ -4069,8 +4522,45 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+/* ---------- Aviso de conexión ---------- */
+function pintarConexion(){
+  const b = document.getElementById('barra_conexion');
+  if(!b) return;
+  b.style.display = navigator.onLine ? 'none' : 'block';
+}
+window.addEventListener('online',  ()=>{ pintarConexion(); showToast('✅ Conexión restablecida'); });
+window.addEventListener('offline', ()=>{ pintarConexion(); guardarBorradorRegistro(); showToast('📴 Te quedaste sin conexión'); });
+
+/* ---------- Borrador del correctivo guardado en el dispositivo ---------- */
+const CLAVE_BORRADOR = 'correctivo_borrador_local';
+let intervaloBorrador = null;
+
+function iniciarAutoBorrador(){
+  if(intervaloBorrador) clearInterval(intervaloBorrador);
+  intervaloBorrador = setInterval(()=>{
+    if(document.getElementById('f_sintomas')) guardarBorradorRegistro();
+    else { clearInterval(intervaloBorrador); intervaloBorrador = null; }
+  }, 8000);
+}
+function guardarBorradorLocal(datos){
+  try{
+    localStorage.setItem(CLAVE_BORRADOR, JSON.stringify({ hoja: sheetActivaKey, datos, ts: Date.now() }));
+  }catch(e){ /* si no hay espacio (fotos grandes), simplemente no se guarda */ }
+}
+function leerBorradorLocal(){
+  try{
+    const g = JSON.parse(localStorage.getItem(CLAVE_BORRADOR) || 'null');
+    if(!g) return null;
+    if(g.hoja !== sheetActivaKey) return null;
+    if(Date.now() - g.ts > 12*60*60*1000){ borrarBorradorLocal(); return null; }  /* más de 12 h: se descarta */
+    return g.datos;
+  }catch(e){ return null; }
+}
+function borrarBorradorLocal(){ try{ localStorage.removeItem(CLAVE_BORRADOR); }catch(e){} }
+
 /* ---------- Init ---------- */
 (function init(){
+  pintarConexion();
   const p = getParams();
   if(p.ver === 'ubt' && p.planta && p.ubt){
     STATE.modoVerUbt = { planta: p.planta, ubt: p.ubt };
