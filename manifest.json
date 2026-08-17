@@ -1,12 +1,14 @@
 {
-  "name": "Correctivo — Lear",
-  "short_name": "Correctivo",
-  "description": "Sistema de llenado digital de formatos de mantenimiento correctivo",
+  "name": "SIM Lear — Sistema Integral de Mantenimiento",
+  "short_name": "SIM Lear",
+  "description": "Correctivo, TPM Autónomo y Focos de mantenimiento",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f0f2f4",
+  "orientation": "any",
+  "background_color": "#2b2b2b",
   "theme_color": "#8a1f1f",
-  "orientation": "portrait",
+  "lang": "es-MX",
   "icons": [
     {
       "src": "icon-192.png",
