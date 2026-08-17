@@ -288,6 +288,9 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.9.0 = líneas asignadas por técnico (exclusivas), registro de actividades del técnico
+           con foto, vista del supervisor por técnico y UBT, y descarga en PDF de
+           correctivos y TPM agrupados por planta y UBT
    1.8.1 = el botón "Llenar correctivo de esta falla" ya abre la hoja de verdad
    1.8.0 = del foco al correctivo con las horas puestas solas, pantalla de pendientes de
            firma para auditor, APQP y mantenimiento, columna Editar fuera de la impresión
@@ -317,7 +320,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.9.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -787,6 +790,15 @@ async function render(){
       app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderHistorialFocos()}</div>`;
       return;
     }
+    if(STATE.vista === 'lineas_tecnicos'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${await renderLineasTecnicos()}</div>`;
+      return;
+    }
+    if(STATE.vista === 'paquete_pdf'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderPaquetePdf()}</div>`;
+      setTimeout(actualizarUbtsPdf, 60);
+      return;
+    }
     if(STATE.viendoTodo){
       app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderVerCorrectivos()}</div>`;
       setTimeout(()=>{ limpiarAutorelleno(['vt_filtro_ubt'], [ubtEsperado()]); filtrarVerTodo(); }, 60);
@@ -874,6 +886,23 @@ async function render(){
   }
   if(STATE.vista === 'tpm' && ['produccion','auditor','supervisor','tecnico','apqp','admin'].includes(STATE.rol)){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderVistaTpm()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'mis_lineas' && STATE.rol==='tecnico'){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderMisLineasTecnico()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'registrar_actividad' && STATE.rol==='tecnico'){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${renderRegistroActividad()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'lineas_tecnicos' && ['supervisor','admin'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderLineasTecnicos()}</div>`;
+    return;
+  }
+  if(STATE.vista === 'paquete_pdf' && ['supervisor','admin'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${renderPaquetePdf()}</div>`;
+    setTimeout(actualizarUbtsPdf, 60);
     return;
   }
   if(STATE.vista === 'pendientes_firma' && ['auditor','apqp','tecnico','supervisor'].includes(STATE.rol)){
@@ -1065,6 +1094,7 @@ function renderMenuInicio(){
     T('','👁️','Ver correctivos y TPM','Por planta y UBT','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('ambar','✍️','Pendientes de firma','Lo que falta que firmen Calidad y APQP',"abrirVista('pendientes_firma')");
+    T('verde wide','📌','Mis UBT / Líneas asignadas','Su TPM y registrar mis actividades',"abrirVista('mis_lineas')");
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='produccion'){
@@ -1089,6 +1119,8 @@ function renderMenuInicio(){
     T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('ambar','✍️','Pendientes de firma','Lo que falta de Calidad y APQP',"abrirVista('pendientes_firma')");
+    T('verde wide','👷','Líneas asignadas de técnicos','Qué lleva cada quien y qué registró','abrirLineasTecnicos()');
+    T('azul wide','📄','Descargar todo en PDF','Correctivos y TPM por planta y UBT',"abrirVista('paquete_pdf')");
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
   else if(rol==='admin'){
@@ -1096,6 +1128,8 @@ function renderMenuInicio(){
     T('azul','📊','Análisis','Reportes generales',"abrirVista('analisis')");
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
+    T('verde','👷','Líneas de técnicos','Qué lleva cada quien','abrirLineasTecnicos()');
+    T('azul','📄','Descargar todo en PDF','Correctivos y TPM',"abrirVista('paquete_pdf')");
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
 
@@ -2114,8 +2148,12 @@ async function renderVistaTpm(opts){
   } else if(STATE.rol === 'produccion' || STATE.rol === 'auditor' || STATE.rol === 'apqp'){
     /* Líder, Supervisor de Producción, Multifuncional, Auditor y APQP: sus líneas asignadas */
     ubtsDisp = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+  } else if(STATE.rol === 'tecnico'){
+    /* El técnico ve el TPM de las líneas que tiene asignadas; si no ha elegido, todas */
+    const suyas = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+    ubtsDisp = suyas.length ? suyas : ubtsDeLaPlanta(STATE.plantasCfg || {}, planta);
   } else {
-    /* Mantenimiento, Supervisor de Mantenimiento y Admin: todas las líneas de la planta */
+    /* Supervisor de Mantenimiento y Admin: todas las líneas de la planta */
     ubtsDisp = ubtsDeLaPlanta(STATE.plantasCfg || {}, planta);
   }
 
@@ -3266,6 +3304,518 @@ function tarjetaPendienteFirma(p, rol){
         ? `firmarAuditor('${escArg(h.key)}','${escArg(f.id)}')`
         : `firmarApqp('${escArg(h.key)}','${escArg(f.id)}')`}">✍️ Firmar este registro</button>` : ''}
   </div>`;
+}
+
+/* ================= LÍNEAS ASIGNADAS A TÉCNICOS ================= */
+
+/* Devuelve qué UBTs de una planta ya tiene tomadas otro técnico */
+async function ubtsTomadasPorOtros(planta){
+  const usuarios = await listUsuarios();
+  const mapa = {};
+  usuarios
+    .filter(u => u.rol === 'tecnico' && slug(u.nombre) !== slug(STATE.nombre))
+    .forEach(u => ((u.ubtsPorPlanta||{})[planta]||[]).forEach(ubt => { mapa[ubt] = u.nombre; }));
+  return mapa;
+}
+
+async function renderMisLineasTecnico(){
+  const planta = STATE.plantaHoy;
+  if(!planta){
+    return `<div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+      <div class="card"><h2>📌 Mis líneas asignadas</h2>
+      <p style="font-size:13.5px;">Primero elige en qué planta estás trabajando.</p>
+      <div class="planta-grid">${PLANTA_NOMBRES.map(p=>`<div class="planta-card" onclick="elegirPlantaHoy('${escArg(p)}')">${escapeHtml(p)}</div>`).join('')}</div></div>`;
+  }
+
+  const todas = ubtsDeLaPlanta(STATE.plantasCfg, planta);
+  const tomadas = await ubtsTomadasPorOtros(planta);
+  const mias = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+
+  if(STATE.editandoLineasTec || mias.length === 0){
+    return `
+    <div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+    <div class="card">
+      <h2>📌 Elige tus líneas en ${escapeHtml(planta)}</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+        Son las UBT donde tú revisas el TPM. Las líneas que ya lleva otro técnico aparecen en gris y no se pueden tomar.
+      </p>
+      <div class="ubt-check-grid">
+        ${todas.map(u=>{
+          const duenio = tomadas[u];
+          if(duenio){
+            return `<label style="opacity:.5;background:#f0f1f2;" title="La lleva ${escapeHtml(duenio)}">
+              <input type="checkbox" disabled> ${escapeHtml(u)}
+              <span style="font-size:9.5px;display:block;color:var(--muted);">${escapeHtml(duenio)}</span></label>`;
+          }
+          return `<label><input type="checkbox" class="lt-chk" value="${escapeHtml(u)}" ${mias.includes(u)?'checked':''}> ${escapeHtml(u)}</label>`;
+        }).join('')}
+      </div>
+      <button class="btn" onclick="guardarLineasTecnico()">Guardar mis líneas</button>
+      ${mias.length ? `<button class="btn ghost" style="margin-top:8px;" onclick="STATE.editandoLineasTec=false;render();">Cancelar</button>` : ''}
+    </div>`;
+  }
+
+  /* Ya tiene líneas: se muestran con sus accesos */
+  const actividades = await listActividadesTecnico({ planta, tecnico: STATE.nombre });
+  const porUbt = {};
+  actividades.forEach(a => (porUbt[a.ubt] ??= []).push(a));
+
+  return `
+  <div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+  <div class="card">
+    <h2>📌 Mis líneas en ${escapeHtml(planta)} (${mias.length})</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Aquí revisas el TPM de tus líneas y registras las actividades que hiciste en ellas.</p>
+    <button class="btn ghost small" onclick="STATE.editandoLineasTec=true;render();">✏️ Cambiar mis líneas</button>
+  </div>
+
+  ${mias.map(ubt=>{
+    const actos = porUbt[ubt] || [];
+    return `<div class="card">
+      <h2>📍 UBT ${escapeHtml(ubt)}</h2>
+      <div style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:10px;">Hojas de TPM de esta línea:</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+        ${MAQ_TPM.map(m=>`<button class="btn small ghost" onclick="abrirTpmDe('${escArg(planta)}','${escArg(ubt)}','${escArg(m)}')">🗓️ ${escapeHtml(m)}</button>`).join('')}
+      </div>
+      <button class="btn small secondary" onclick="abrirRegistroActividad('${escArg(ubt)}')">📝 Registrar mis actividades</button>
+      <div style="margin-top:12px;">
+        <div style="font-size:12.5px;font-weight:700;color:var(--muted);">Actividades registradas (${actos.length})</div>
+        ${actos.length===0 ? '<div class="empty" style="padding:14px;">Todavía no registras actividades en esta línea.</div>'
+          : actos.slice(0,6).map(a=>tarjetaActividad(a, true)).join('')}
+        ${actos.length>6?`<div style="font-size:12px;color:var(--muted);">…y ${actos.length-6} más.</div>`:''}
+      </div>
+    </div>`;
+  }).join('')}`;
+}
+
+async function guardarLineasTecnico(){
+  const sel = [...document.querySelectorAll('.lt-chk:checked')].map(c=>c.value);
+  if(sel.length === 0){ showToast('⚠️ Selecciona al menos una línea'); return; }
+  const planta = STATE.plantaHoy;
+
+  /* Se vuelve a revisar por si otro técnico la tomó mientras tanto */
+  const tomadas = await ubtsTomadasPorOtros(planta);
+  const choque = sel.filter(u => tomadas[u]);
+  if(choque.length){
+    showToast(`⚠️ ${choque[0]} la acaba de tomar ${tomadas[choque[0]]}`);
+    render();
+    return;
+  }
+
+  if(!STATE.usuario.ubtsPorPlanta) STATE.usuario.ubtsPorPlanta = {};
+  STATE.usuario.ubtsPorPlanta[planta] = sel;
+  try{ await saveUsuario(STATE.usuario); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+  STATE.editandoLineasTec = false;
+  showToast('Líneas guardadas ✓');
+  render();
+}
+
+/* ---------- Actividades del técnico ---------- */
+/* Se guardan en la tabla config, una por renglón, con clave acttec:planta:ubt:id */
+function claveActividad(planta, ubt, id){
+  return `acttec:${slug(planta)}:${slug(ubt)}:${id}`;
+}
+async function saveActividadTecnico(act){
+  await sbFetch('config?on_conflict=clave', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave: claveActividad(act.planta, act.ubt, act.id), valor: act, actualizado_en: ahoraISO() })
+  });
+}
+async function listActividadesTecnico(filtro){
+  filtro = filtro || {};
+  let patron = 'acttec:';
+  if(filtro.planta) patron += slug(filtro.planta) + ':';
+  if(filtro.planta && filtro.ubt) patron += slug(filtro.ubt) + ':';
+  try{
+    const r = await sbFetch('config?clave=like.' + encodeURIComponent(patron + '*') + '&select=valor&order=clave.desc');
+    let lista = (r||[]).map(x=>x.valor).filter(Boolean);
+    if(filtro.tecnico) lista = lista.filter(a => slug(a.tecnico||'') === slug(filtro.tecnico));
+    return lista.sort((a,b)=>String(b.creado_en||'').localeCompare(String(a.creado_en||'')));
+  }catch(e){ console.warn(e); return []; }
+}
+async function borrarActividadTecnico(act){
+  await sbFetch('config?clave=eq.'+encodeURIComponent(claveActividad(act.planta, act.ubt, act.id)), { method:'DELETE', prefer:'return=minimal' });
+}
+
+let fotoActividad = null;
+function abrirRegistroActividad(ubt){
+  STATE.actUbt = ubt;
+  fotoActividad = null;
+  STATE.vista = 'registrar_actividad';
+  render();
+}
+
+function renderRegistroActividad(){
+  const ubt = STATE.actUbt;
+  return `
+  <div class="card no-print"><button class="btn ghost small" onclick="abrirVista('mis_lineas')">← Volver a mis líneas</button></div>
+  <div class="card">
+    <h2>📝 Registrar actividad — UBT ${escapeHtml(ubt)}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Anota lo que hiciste en esta línea. Tu supervisor lo podrá ver.</p>
+    <div class="row2">
+      <div class="field"><label>Fecha</label><input id="ac_fecha" type="date" value="${todayISO()}" max="${todayISO()}"></div>
+      <div class="field"><label>Hora</label><input id="ac_hora" type="time" value="${String(ahora().getHours()).padStart(2,'0')}:${String(ahora().getMinutes()).padStart(2,'0')}"></div>
+    </div>
+    <div class="field"><label>Máquina o equipo</label>
+      <select id="ac_maquina" onchange="cambioMaquinaActividad()">
+        ${MAQ_COR.map(m=>`<option>${escapeHtml(m)}</option>`).join('')}
+        <option value="__otro">➕ Otro (escribirlo)</option>
+      </select>
+    </div>
+    <div class="field" id="ac_otro_wrap" style="display:none;">
+      <label>¿Qué máquina o equipo?</label>
+      <input id="ac_otro" placeholder="Escribe el nombre del equipo">
+    </div>
+    <div class="field"><label>¿Qué hiciste?</label>
+      <textarea id="ac_desc" style="min-height:110px;" placeholder="Describe la actividad que realizaste..."></textarea>
+    </div>
+    <div class="field">
+      <label>📷 Foto (opcional)</label>
+      <input type="file" id="ac_foto" accept="image/*" onchange="previsualizarFotoActividad(this)">
+      <div id="ac_prev" style="margin-top:8px;"></div>
+    </div>
+    <button class="btn" id="ac_btn" onclick="guardarActividadTecnico()">💾 Guardar actividad</button>
+  </div>`;
+}
+
+function cambioMaquinaActividad(){
+  const sel = document.getElementById('ac_maquina');
+  const wrap = document.getElementById('ac_otro_wrap');
+  if(sel && wrap) wrap.style.display = (sel.value === '__otro') ? 'flex' : 'none';
+}
+
+async function previsualizarFotoActividad(input){
+  const cont = document.getElementById('ac_prev');
+  const file = input.files && input.files[0];
+  if(!file){ fotoActividad = null; if(cont) cont.innerHTML=''; return; }
+  if(cont) cont.innerHTML = '<span style="font-size:12.5px;color:#6b7280;">Procesando imagen...</span>';
+  try{
+    fotoActividad = await comprimirImagen(file, 900, 0.7);
+    if(cont) cont.innerHTML = `<img src="${fotoActividad}" style="max-width:220px;border-radius:8px;border:1px solid #ddd;">
+      <button class="btn ghost small" style="margin-left:8px;" onclick="quitarFotoActividad()">✖ Quitar</button>`;
+  }catch(e){ if(cont) cont.innerHTML = '<span style="color:#a13636;font-size:12.5px;">No se pudo procesar la imagen.</span>'; }
+}
+function quitarFotoActividad(){
+  fotoActividad = null;
+  const i = document.getElementById('ac_foto'); if(i) i.value='';
+  const c = document.getElementById('ac_prev'); if(c) c.innerHTML='';
+}
+
+let guardandoActividad = false;
+async function guardarActividadTecnico(){
+  if(guardandoActividad) return;
+  const desc = document.getElementById('ac_desc').value.trim();
+  if(!desc){ showToast('⚠️ Describe lo que hiciste'); return; }
+  const selMaq = document.getElementById('ac_maquina').value;
+  let maquina = selMaq;
+  if(selMaq === '__otro'){
+    maquina = document.getElementById('ac_otro').value.trim();
+    if(!maquina){ showToast('⚠️ Escribe qué máquina o equipo fue'); return; }
+  }
+
+  const btn = document.getElementById('ac_btn');
+  guardandoActividad = true;
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; btn.style.opacity='.6'; }
+
+  const act = {
+    id: uid(),
+    planta: STATE.plantaHoy,
+    ubt: STATE.actUbt,
+    maquina,
+    esOtro: selMaq === '__otro',
+    descripcion: desc,
+    foto: fotoActividad || '',
+    tecnico: STATE.nombre,
+    gafete: STATE.usuario?.gafete || '',
+    turno: STATE.usuario?.turno || '',
+    fecha: document.getElementById('ac_fecha').value,
+    hora: document.getElementById('ac_hora').value,
+    creado_en: ahoraISO()
+  };
+
+  try{ await saveActividadTecnico(act); }
+  catch(err){
+    guardandoActividad = false;
+    if(btn){ btn.disabled=false; btn.textContent='💾 Guardar actividad'; btn.style.opacity='1'; }
+    showToast('⚠️ No se pudo guardar: '+(err.message||err));
+    return;
+  }
+  guardandoActividad = false;
+  fotoActividad = null;
+  showToast('Actividad guardada ✓');
+  STATE.vista = 'mis_lineas';
+  render();
+}
+
+function tarjetaActividad(a, puedeBorrar){
+  return `
+  <div style="border:1px solid #e2e5e8;border-left:4px solid #0f3d5c;border-radius:9px;padding:11px;margin-top:8px;">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+      <b style="font-size:13px;">⚙️ ${escapeHtml(a.maquina||'')}${a.esOtro?' <span style="font-weight:400;font-size:11px;color:var(--muted);">(otro)</span>':''}</b>
+      <span style="font-size:11.5px;color:var(--muted);">${escapeHtml(a.fecha||'')} ${escapeHtml(a.hora||'')}</span>
+    </div>
+    <div style="font-size:13px;margin-top:6px;">${escapeHtml(a.descripcion||'')}</div>
+    ${a.foto?`<img src="${a.foto}" style="max-width:200px;border-radius:7px;border:1px solid #ddd;margin-top:8px;cursor:pointer;" onclick="verFotoGrande('${escArg(a.id)}')"><img id="big_${a.id}" src="${a.foto}" style="display:none;">`:''}
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">Registró: ${escapeHtml(a.tecnico||'')}${a.turno?(' · Turno '+escapeHtml(a.turno)):''}</div>
+    ${puedeBorrar?`<button class="btn ghost small" style="margin-top:7px;color:#a13636;" onclick="confirmarBorrarActividad(this,'${escArg(a.planta)}','${escArg(a.ubt)}','${escArg(a.id)}')">🗑 Borrar</button>`:''}
+  </div>`;
+}
+
+function verFotoGrande(id){
+  const img = document.getElementById('big_'+id);
+  if(!img) return;
+  const v = window.open('', '_blank', 'width=800,height=700');
+  if(v) v.document.write(`<img src="${img.src}" style="max-width:100%">`);
+}
+
+function confirmarBorrarActividad(btn, planta, ubt, id){
+  if(btn.dataset.c === '1'){ borrarActividadYRefrescar(planta, ubt, id); return; }
+  btn.dataset.c = '1';
+  btn.textContent = '¿Seguro? Toca otra vez';
+  setTimeout(()=>{ btn.dataset.c=''; btn.textContent='🗑 Borrar'; }, 3000);
+}
+async function borrarActividadYRefrescar(planta, ubt, id){
+  try{ await borrarActividadTecnico({planta, ubt, id}); showToast('Actividad borrada'); }
+  catch(e){ showToast('⚠️ No se pudo borrar'); }
+  render();
+}
+
+/* ================= SUPERVISOR: LÍNEAS ASIGNADAS DE TÉCNICOS ================= */
+function abrirLineasTecnicos(){
+  STATE.ltPlanta = null; STATE.ltTecnico = null; STATE.ltUbt = null;
+  STATE.vista = 'lineas_tecnicos';
+  render();
+}
+function ltElegirPlanta(p){ STATE.ltPlanta = p; STATE.ltTecnico = null; STATE.ltUbt = null; render(); }
+function ltElegirTecnico(n){ STATE.ltTecnico = n; STATE.ltUbt = null; render(); }
+function ltElegirUbt(u){ STATE.ltUbt = u; render(); }
+function ltVolver(){
+  if(STATE.ltUbt){ STATE.ltUbt = null; }
+  else if(STATE.ltTecnico){ STATE.ltTecnico = null; }
+  else if(STATE.ltPlanta){ STATE.ltPlanta = null; }
+  else { STATE.vista = 'menu'; }
+  render();
+}
+
+async function renderLineasTecnicos(){
+  const volver = `<div class="card no-print"><button class="btn ghost small" onclick="ltVolver()">← Volver</button></div>`;
+
+  /* Paso 1: elegir planta */
+  if(!STATE.ltPlanta){
+    return `${volver}<div class="card">
+      <h2>👷 Líneas asignadas de técnicos</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Elige la planta que quieres revisar.</p>
+      <div class="planta-grid">${PLANTA_NOMBRES.map(p=>`<div class="planta-card" onclick="ltElegirPlanta('${escArg(p)}')">${escapeHtml(p)}</div>`).join('')}</div>
+    </div>`;
+  }
+
+  const usuarios = await listUsuarios();
+  const tecnicos = usuarios.filter(u => u.rol === 'tecnico' && !u.bloqueado);
+
+  /* Paso 2: elegir técnico */
+  if(!STATE.ltTecnico){
+    return `${volver}<div class="card">
+      <h2>👷 Técnicos — ${escapeHtml(STATE.ltPlanta)}</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">Toca un técnico para ver las líneas que lleva asignadas.</p>
+      ${tecnicos.length===0 ? '<div class="empty">No hay técnicos registrados.</div>' : `
+      <div class="menu-grid">
+        ${tecnicos.map(t=>{
+          const n = ((t.ubtsPorPlanta||{})[STATE.ltPlanta]||[]).length;
+          return `<button class="menu-tile" onclick="ltElegirTecnico('${escArg(t.nombre)}')">
+            <span class="ico">🔧</span>
+            <span class="txt">${escapeHtml(t.nombre)}</span>
+            <span class="sub">${n} línea(s)${t.turno?(' · Turno '+escapeHtml(t.turno)):''}</span>
+          </button>`;
+        }).join('')}
+      </div>`}
+    </div>`;
+  }
+
+  const tec = tecnicos.find(t => slug(t.nombre) === slug(STATE.ltTecnico));
+  const susUbts = (tec?.ubtsPorPlanta||{})[STATE.ltPlanta] || [];
+
+  /* Paso 3: ver sus líneas */
+  if(!STATE.ltUbt){
+    const actos = await listActividadesTecnico({ planta: STATE.ltPlanta, tecnico: STATE.ltTecnico });
+    const conteo = {};
+    actos.forEach(a => { conteo[a.ubt] = (conteo[a.ubt]||0)+1; });
+    return `${volver}<div class="card">
+      <h2>🔧 ${escapeHtml(STATE.ltTecnico)}</h2>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+        ${escapeHtml(STATE.ltPlanta)} · ${susUbts.length} línea(s) asignada(s) · ${actos.length} actividad(es) registrada(s)
+      </p>
+      ${susUbts.length===0 ? '<div class="empty">Este técnico todavía no elige sus líneas.</div>' : `
+      <div class="menu-grid">
+        ${susUbts.map(u=>`<button class="menu-tile azul" onclick="ltElegirUbt('${escArg(u)}')">
+          <span class="ico">📍</span>
+          <span class="txt">UBT ${escapeHtml(u)}</span>
+          <span class="sub">${conteo[u]||0} actividad(es)</span>
+        </button>`).join('')}
+      </div>`}
+    </div>`;
+  }
+
+  /* Paso 4: actividades de esa UBT */
+  const actos = await listActividadesTecnico({ planta: STATE.ltPlanta, ubt: STATE.ltUbt, tecnico: STATE.ltTecnico });
+  return `${volver}<div class="card">
+    <h2>📍 UBT ${escapeHtml(STATE.ltUbt)} — ${escapeHtml(STATE.ltTecnico)}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">${actos.length} actividad(es) registrada(s) en esta línea.</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+      ${MAQ_TPM.map(m=>`<button class="btn small ghost" onclick="abrirTpmDe('${escArg(STATE.ltPlanta)}','${escArg(STATE.ltUbt)}','${escArg(m)}')">🗓️ TPM ${escapeHtml(m)}</button>`).join('')}
+    </div>
+    ${actos.length===0 ? '<div class="empty">Sin actividades registradas en esta línea.</div>'
+      : actos.map(a=>tarjetaActividad(a, false)).join('')}
+  </div>`;
+}
+
+/* ================= PAQUETE PARA PDF (correctivos + TPM) ================= */
+function renderPaquetePdf(){
+  return `
+  <div class="card">
+    <h2>📄 Descargar todo en PDF</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+      Arma un solo documento con los correctivos y las hojas de TPM, ordenado por planta y por UBT.
+      En la ventana de impresión elige <b>Guardar como PDF</b>.
+    </p>
+    <div class="row2">
+      <div class="field"><label>Planta</label>
+        <select id="pdf_planta" onchange="actualizarUbtsPdf()">
+          <option value="">Todas las plantas</option>
+          ${PLANTA_NOMBRES.map(p=>`<option>${escapeHtml(p)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>UBT</label>
+        <select id="pdf_ubt"><option value="">Todas las UBT</option></select>
+      </div>
+    </div>
+    <div class="field"><label>Mes del TPM</label>
+      <div class="row2">
+        <select id="pdf_mes">${MESES.map((m,i)=>`<option value="${i}" ${i===ahora().getMonth()?'selected':''}>${m}</option>`).join('')}</select>
+        <input id="pdf_anio" value="${ahora().getFullYear()}" inputmode="numeric">
+      </div>
+    </div>
+    <button class="btn secondary" onclick="generarPaquetePdf('ambos')">📄 Correctivos + TPM</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="generarPaquetePdf('correctivos')">📝 Solo correctivos</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="generarPaquetePdf('tpm')">🗓️ Solo TPM</button>
+    <div id="pdf_estado" style="font-size:12.5px;color:var(--muted);margin-top:10px;"></div>
+  </div>`;
+}
+
+function actualizarUbtsPdf(){
+  const planta = document.getElementById('pdf_planta').value;
+  const sel = document.getElementById('pdf_ubt');
+  if(!sel) return;
+  const ubts = planta ? ubtsDeLaPlanta(STATE.plantasCfg, planta) : [];
+  sel.innerHTML = '<option value="">Todas las UBT</option>' + ubts.map(u=>`<option>${escapeHtml(u)}</option>`).join('');
+}
+
+async function generarPaquetePdf(que){
+  const planta = document.getElementById('pdf_planta').value;
+  const ubtSel = document.getElementById('pdf_ubt').value;
+  const mes = Number(document.getElementById('pdf_mes').value);
+  const anio = Number(document.getElementById('pdf_anio').value) || ahora().getFullYear();
+  const est = document.getElementById('pdf_estado');
+  if(est) est.textContent = 'Preparando documento, puede tardar un poco...';
+
+  const hojas = await listSheets(planta ? { planta } : undefined);
+  const filtradas = hojas.filter(h => (!planta || h.planta===planta) && (!ubtSel || h.ubtNo===ubtSel));
+
+  /* Se agrupa por planta y luego por UBT, como pediste */
+  const arbol = {};
+  filtradas.forEach(h => {
+    (arbol[h.planta] ??= {});
+    (arbol[h.planta][h.ubtNo] ??= []).push(h);
+  });
+  /* Las UBT que solo tienen TPM también deben salir */
+  const plantasParaTpm = planta ? [planta] : PLANTA_NOMBRES;
+  plantasParaTpm.forEach(p=>{
+    const lista = ubtSel ? [ubtSel] : ubtsDeLaPlanta(STATE.plantasCfg, p);
+    (arbol[p] ??= {});
+    lista.forEach(u => { arbol[p][u] ??= []; });
+  });
+
+  let cuerpo = '';
+  let nCorr = 0, nTpm = 0;
+
+  for(const pl of Object.keys(arbol).sort()){
+    const ubts = Object.keys(arbol[pl]).sort();
+    let bloquePlanta = '';
+    for(const ubt of ubts){
+      let bloqueUbt = '';
+
+      if(que !== 'tpm'){
+        const hs = (arbol[pl][ubt]||[]).sort((a,b)=>String(a.maquina).localeCompare(String(b.maquina)) || (a.pagina||1)-(b.pagina||1));
+        hs.forEach(h=>{
+          bloqueUbt += `<div class="hoja-corr">${renderSheetVisual(h,{role:'lectura', publico:true})}</div>`;
+          nCorr++;
+        });
+      }
+
+      if(que !== 'correctivos'){
+        for(const maq of MAQ_TPM){
+          const regs = await getTpmMes(pl, ubt, maq, anio, mes);
+          if(regs.length === 0) continue;
+          const marcas = {};
+          regs.forEach(r => { marcas[`${r.fecha}|${letraTurno(r.turno)}`] = r; });
+          const claveF = claveFirmasTpm(pl, ubt, maq, anio, mes);
+          const guardado = await getFirmasTpm(claveF);
+          const imgs = await getImagenesTpm(maq);
+          tpmCtx = { planta:pl, ubt, maquina:maq, anio, mes, marcas, firmas:guardado,
+                     comentarios: guardado.comentarios||'', imgs, claveF };
+          bloqueUbt += `<div class="hoja-tpm">${renderHojaTpm()}</div>`;
+          nTpm++;
+        }
+        tpmCtx = null;
+      }
+
+      if(bloqueUbt){
+        bloquePlanta += `<div class="sep-ubt"><h3>📍 ${escapeHtml(pl)} · UBT ${escapeHtml(ubt)}</h3></div>` + bloqueUbt;
+      }
+    }
+    if(bloquePlanta) cuerpo += bloquePlanta;
+  }
+
+  if(nCorr === 0 && nTpm === 0){
+    if(est) est.textContent = '⚠️ No se encontraron hojas con ese filtro.';
+    showToast('⚠️ No hay nada que exportar con ese filtro');
+    return;
+  }
+
+  const titulo = `Correctivos-y-TPM-${planta||'Todas'}${ubtSel?('-'+ubtSel):''}-${MESES[mes]}-${anio}`;
+  const estilos = [...document.querySelectorAll('style')].map(x=>x.outerHTML).join('');
+  const v = window.open('', '_blank', 'width=1200,height=900');
+  if(!v){ showToast('⚠️ El navegador bloqueó la ventana emergente'); return; }
+  v.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>${estilos}
+    <style>
+      body{background:#fff;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;}
+      .no-print{display:none !important;}
+      @page horizontal{ size: letter landscape; margin:6mm; }
+      @page vertical{ size: letter portrait; margin:5mm; }
+      .hoja-corr{ page: horizontal; page-break-after:always; break-after:page; }
+      .hoja-tpm{ page: vertical; page-break-after:always; break-after:page; }
+      .hoja-corr .sheet-page{border:none;box-shadow:none;width:100%;min-height:0;margin:0;padding:0;transform:none;}
+      .hoja-corr .lear-logo{width:150px;}
+      .hoja-corr table.sheet-table tbody tr{height:58px;}
+      .hoja-tpm .tpm-hoja{border:none;box-shadow:none;width:816px;min-height:1040px;margin:0;padding:0;
+                          transform:scale(.945);transform-origin:top left;}
+      .hoja-tpm .tpm-chk-cel{display:none;}
+      .sep-ubt{page-break-before:always;break-before:page;padding:6mm 0 3mm;}
+      .sep-ubt h3{font-size:15px;margin:0;border-bottom:2px solid #333;padding-bottom:4px;}
+      .portada{padding:14mm;page-break-after:always;}
+      .portada h1{font-size:26px;margin:0 0 6px;}
+      .portada p{font-size:13px;color:#444;margin:2px 0;}
+    </style></head><body>
+    <div class="portada">
+      <h1>Correctivos y TPM</h1>
+      <p><b>Alcance:</b> ${escapeHtml(planta||'Todas las plantas')}${ubtSel?(' · UBT '+escapeHtml(ubtSel)):''}</p>
+      <p><b>TPM del mes:</b> ${MESES[mes]} ${anio}</p>
+      <p><b>Hojas de correctivo:</b> ${nCorr} &nbsp;·&nbsp; <b>Hojas de TPM:</b> ${nTpm}</p>
+      <p><b>Generado:</b> ${nowLabel()} por ${escapeHtml(STATE.nombre||'Supervisor')}</p>
+    </div>
+    ${cuerpo}</body></html>`);
+  v.document.close(); v.focus();
+  if(est) est.textContent = `✓ Documento listo: ${nCorr} hoja(s) de correctivo y ${nTpm} de TPM.`;
+  setTimeout(()=>v.print(), 900);
 }
 
 /* ---------- Ver correctivos (solo lectura) ---------- */
