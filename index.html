@@ -288,6 +288,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   1.8.1 = el botón "Llenar correctivo de esta falla" ya abre la hoja de verdad
    1.8.0 = del foco al correctivo con las horas puestas solas, pantalla de pendientes de
            firma para auditor, APQP y mantenimiento, columna Editar fuera de la impresión
            y solo para mantenimiento, fecha simulada solo para el administrador
@@ -316,7 +317,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.8.1';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -2859,10 +2860,26 @@ async function llenarCorrectivoDeSolicitud(id){
     solicitante: s.solicitante || ''
   };
 
+  /* Hay que dejar listo el camino completo: planta, UBT y hoja, y luego redibujar */
   STATE.plantaHoy = s.planta;
+  STATE.ubtElegida = s.ubt_no;
   STATE.vista = null;
+  STATE.viendoTodo = false;
+  pararAutoRefrescoFoco();
   showToast('Abriendo el correctivo de la UBT ' + s.ubt_no + '...');
-  await abrirPaginaAutomatica(s.planta, s.ubt_no, s.maquina, mesActual(), anioActual());
+  try{
+    await abrirPaginaAutomatica(s.planta, s.ubt_no, s.maquina, mesActual(), anioActual());
+  }catch(err){
+    showToast('⚠️ No se pudo abrir la hoja: ' + (err.message||err));
+    return;
+  }
+  if(!sheetActivaKey){ showToast('⚠️ No se pudo abrir la hoja de esa máquina'); return; }
+  await render();
+  /* Sube hasta el formulario para que no tenga que buscarlo */
+  setTimeout(()=>{
+    const el = document.getElementById('aviso_solicitud') || document.getElementById('f_sintomas');
+    if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+  }, 250);
 }
 
 /* Hora en formato HH:MM, que es lo que pide el campo del formulario */
