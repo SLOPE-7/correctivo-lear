@@ -326,6 +326,8 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   2.4.0 = las hojas se encogen solas para verse completas (ya no quedan cortadas por el
+           desplazamiento), con botón para volver al tamaño real
    2.3.0 = impresión corregida: correctivos siempre horizontal y TPM siempre vertical,
            en ventanas separadas, sin portada ni páginas separadoras
    2.2.0 = concepto de bahía (el foco físico es uno por bahía, compartido por sus UBT),
@@ -366,7 +368,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -807,6 +809,7 @@ async function render(){
   if(STATE.modoVerUbt){
     document.body.classList.remove('login-bg');
     app.innerHTML = await renderVistaUbtPublica();
+    setTimeout(ajustarTodasLasHojas, 200);
     return;
   }
 
@@ -912,6 +915,7 @@ async function render(){
   if(STATE.viendoTodo){
     app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderVerCorrectivos()}</div>`;
     setTimeout(()=>{ limpiarAutorelleno(['vt_filtro_ubt'], [ubtEsperado()]); filtrarVerTodo(); }, 60);
+    setTimeout(ajustarTodasLasHojas, 160);
     return;
   }
 
@@ -965,6 +969,7 @@ async function render(){
   }
   if(STATE.vista === 'archivo' && ['tecnico','supervisor','auditor','apqp','admin'].includes(STATE.rol)){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderArchivo()}</div>`;
+    setTimeout(ajustarTodasLasHojas, 160);
     return;
   }
   if(STATE.vista === 'pendientes_firma' && ['auditor','apqp','tecnico','supervisor'].includes(STATE.rol)){
@@ -1027,6 +1032,7 @@ async function render(){
   app.innerHTML = renderTopbar() + renderBarraCola() + `<div class="wrap"><div id="banner_jornada" class="no-print" style="display:none;border-radius:10px;padding:14px;margin-bottom:14px;"></div>${avisoEntradaAnticipada()}${barraInicio()}${body}</div>`;
   setTimeout(iniciarVigilanciaJornada, 100);
   setTimeout(iniciarRecordatorios, 200);
+  setTimeout(ajustarTodasLasHojas, 140);
   if(STATE.rol==='produccion') setTimeout(cargarZonaTpm, 120);
   if(STATE.rol==='supervisor') setTimeout(()=>{ limpiarAutorelleno(['filtro_planta','filtro_ubt']); filtrarSupervisor(); }, 60);
   if(STATE.rol==='tecnico' && sheetActivaKey) setTimeout(()=>{ cargarListaPartes(); restaurarBorradorRegistro(); aplicarDatosDeSolicitud(); iniciarAutoBorrador(); }, 60);
@@ -1812,12 +1818,12 @@ async function renderAuditor(){
   <div class="card"><h2>🔔 Pendientes de tu firma (${pendientesFilas.length})</h2>
     ${pendientesFilas.length===0 ? '<div class="empty">Sin firmas pendientes. ✓</div>' :
       pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> realizó una reparación en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha} — necesita tu firma.</div>`).join('')}
-    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'auditor'})}</div></div>`).join('')}
+    ${sheetsConPendientes.map(s=>envolverHoja(s, {role:'auditor'})).join('')}
   </div>
   <div class="card"><h2>📋 Todos los correctivos de tus líneas — ${STATE.plantaHoy}</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">UBT asignados: ${misUbts.join(', ')||'—'}</p>
     ${sinPendientes.length===0 ? '<div class="empty">No hay más hojas registradas en tus líneas.</div>' :
-      sinPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'auditor'})}</div></div>`).join('')}
+      sinPendientes.map(s=>envolverHoja(s, {role:'auditor'})).join('')}
   </div>`;
 }
 async function firmarAuditor(sheetKeyStr, filaId){
@@ -1847,12 +1853,12 @@ async function renderApqp(){
   <div class="card"><h2>🔔 Pendientes de tu firma (${pendientesFilas.length})</h2>
     ${pendientesFilas.length===0 ? '<div class="empty">Sin firmas pendientes. ✓</div>' :
       pendientesFilas.map(({s,f})=>`<div class="notif"><b>${escapeHtml(f.tecnico)}</b> solicitó tu firma en UBT <b>${escapeHtml(s.ubtNo)}</b> (${escapeHtml(s.maquina)}) el ${f.fecha}.</div>`).join('')}
-    ${sheetsConPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'apqp'})}</div></div>`).join('')}
+    ${sheetsConPendientes.map(s=>envolverHoja(s, {role:'apqp'})).join('')}
   </div>
   <div class="card"><h2>📋 Todos los correctivos de tus líneas — ${STATE.plantaHoy}</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">UBT asignados: ${misUbts.join(', ')||'—'}</p>
     ${sinPendientes.length===0 ? '<div class="empty">No hay más hojas registradas en tus líneas.</div>' :
-      sinPendientes.map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s, {role:'apqp'})}</div></div>`).join('')}
+      sinPendientes.map(s=>envolverHoja(s, {role:'apqp'})).join('')}
   </div>`;
 }
 async function firmarApqp(sheetKeyStr, filaId){
@@ -1907,7 +1913,7 @@ async function renderVistaUbtPublica(){
           <span style="font-weight:400;font-size:12px;opacity:.8;">(${delMesPasado.length} hoja/s de correctivo)</span>
         </summary>
         <div style="padding-top:12px;">
-          ${delMesPasado.map(x=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(x,{role:'lectura', publico:true})}</div></div>`).join('')}
+          ${delMesPasado.map(x=>envolverHoja(x,{role:'lectura', publico:true})).join('')}
           ${archivoTpm}
         </div>
       </details>
@@ -1960,7 +1966,7 @@ async function renderVistaUbtPublica(){
         Object.keys(porMaquina).sort().map(maq=>`
           <div class="card">
             <h2>⚙️ ${escapeHtml(maq)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porMaquina[maq].length} hoja/s)</span></h2>
-            ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura', publico:true})}</div></div>`).join('')}
+            ${porMaquina[maq].map(s=>envolverHoja(s,{role:'lectura', publico:true})).join('')}
           </div>`).join('')}
     </div>
     <div id="bloque_archivo">${archivoHtml}</div>
@@ -4119,7 +4125,7 @@ async function renderArchivo(){
     Object.keys(porUbt).sort().map(ubt=>`
       <div class="card">
         <h2>📍 UBT ${escapeHtml(ubt)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porUbt[ubt].length} hoja/s)</span></h2>
-        ${porUbt[ubt].map(h=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(h,{role:'lectura'})}</div></div>`).join('')}
+        ${porUbt[ubt].map(h=>envolverHoja(h,{role:'lectura'})).join('')}
       </div>`).join('')}
 
   ${tpmHtml}`;
@@ -4174,6 +4180,7 @@ function filtrarVerTodo(){
     ? '<div class="empty">No hay correctivos registrados en tus líneas asignadas.</div>'
     : '<div class="empty">Sin hojas.</div>';
   document.getElementById('vt_lista').innerHTML = filtradas.length===0 ? vacio : renderAgrupadoPorPlantaUbtMaquina(filtradas, STATE.rol);
+  setTimeout(ajustarTodasLasHojas, 80);
 }
 
 /* ---------- SUPERVISOR ---------- */
@@ -4195,6 +4202,7 @@ function filtrarSupervisor(){
   const planta = pEl.value.toLowerCase(), ubt = uEl.value.toLowerCase();
   const filtradas = sheetsCache.filter(s => (!planta || (s.planta||'').toLowerCase().includes(planta)) && (!ubt || (s.ubtNo||'').toLowerCase().includes(ubt)));
   document.getElementById('lista_sup').innerHTML = filtradas.length===0 ? '<div class="empty">Sin hojas.</div>' : renderAgrupadoPorPlantaUbtMaquina(filtradas, 'supervisor');
+  setTimeout(ajustarTodasLasHojas, 80);
 }
 
 function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
@@ -4210,7 +4218,7 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
     const totalPlanta = Object.values(ubts).reduce((a,m)=>a+Object.values(m).reduce((b,arr)=>b+arr.length,0),0);
     return `<details style="margin-bottom:8px;">
       <summary style="cursor:pointer;font-weight:700;padding:8px 10px;background:#2f3742;color:#fff;border-radius:6px;">📍 ${escapeHtml(planta)} (${totalPlanta} hoja${totalPlanta!==1?'s':''})</summary>
-      <div style="padding:10px 0 0 14px;">
+      <div style="padding:10px 0 0 6px;">
         ${Object.keys(ubts).sort().map(ubt=>{
           const maquinas = ubts[ubt];
           const totalUbt = Object.values(maquinas).reduce((a,arr)=>a+arr.length,0);
@@ -4223,11 +4231,11 @@ function renderAgrupadoPorPlantaUbtMaquina(sheets, viewerRole){
                 ${MAQ_TPM.map(m=>`<button class="btn small ghost" onclick="abrirTpmDe('${escArg(planta)}','${escArg(ubt)}','${escArg(m)}')">${escapeHtml(m)}</button>`).join('')}
               </div>
             </div>
-            <div style="padding:8px 0 0 14px;">
+            <div style="padding:8px 0 0 6px;">
               ${Object.keys(maquinas).sort().map(maq=>`
                 <details style="margin-bottom:6px;">
                   <summary style="cursor:pointer;font-size:13px;padding:5px 10px;background:#f7f8f9;border-radius:6px;">⚙️ ${escapeHtml(maq)} (${maquinas[maq].length})</summary>
-                  <div style="padding-top:8px;">${maquinas[maq].map(s=> puedeImprimir ? renderSheetPrintWrap(s,{role:'lectura'}) : `<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura'})}</div></div>`).join('')}</div>
+                  <div style="padding-top:8px;">${maquinas[maq].map(s=> puedeImprimir ? renderSheetPrintWrap(s,{role:'lectura'}) : envolverHoja(s,{role:'lectura'})).join('')}</div>
                 </details>`).join('')}
             </div>
           </details>`;
@@ -4252,6 +4260,7 @@ function imprimirHoja(elId, sheetKey){
 
   /* Se imprime una copia limpia: sin botones y sin la columna Editar */
   const copia = contenido.cloneNode(true);
+  copia.style.transform = ''; copia.style.transformOrigin = '';   /* el encogido es solo de pantalla */
   copia.querySelectorAll('.no-print').forEach(el=>el.remove());
   const colEdit = copia.querySelector('col.col-edit');
   if(colEdit) colEdit.remove();
@@ -4284,11 +4293,61 @@ function renderSheetPrintWrap(sheet, opts){
       data-mes="${escapeHtml(sheet.mes)}" data-anio="${escapeHtml(sheet.anio)}">
     <div class="sheet-scroll">${renderSheetVisual(sheet, opts)}</div>
     <div class="no-print" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ghost small" onclick="alternarAjusteHoja(this)">🔎 Ver tamaño real</button>
       <button class="btn ghost small" onclick="imprimirHoja('${wrapId}','${sheet.key}')">🖨️ Imprimir esta hoja</button>
       <button class="btn ${yaEsta?'ghost':'secondary'} small" onclick="toggleCola('${sheet.key}')">${yaEsta?'✓ En cola (quitar)':'➕ Agregar a cola'}</button>
     </div>
   </div>`;
 }
+
+/* ---------- Ver la hoja completa sin tener que deslizarla ---------- */
+/* La hoja mide lo mismo que el papel; si no cabe, se encoge para verla entera */
+function envolverHoja(sheet, opts){
+  return `<div class="sheet-print-wrap">
+    <div class="no-print" style="margin-bottom:6px;">
+      <button class="btn ghost small" onclick="alternarAjusteHoja(this)">🔎 Ver tamaño real</button>
+    </div>
+    <div class="sheet-scroll">${renderSheetVisual(sheet, opts)}</div>
+  </div>`;
+}
+
+function ajustarHoja(cont){
+  const hoja = cont.querySelector('.sheet-page');
+  if(!hoja) return;
+  hoja.style.transform = ''; hoja.style.transformOrigin = ''; cont.style.height = '';
+  const disponible = cont.clientWidth;
+  const ancho = hoja.offsetWidth;
+  if(!disponible || !ancho || ancho <= disponible){ cont.dataset.fit = ''; return; }
+  const esc = disponible / ancho;
+  hoja.style.transform = `scale(${esc})`;
+  hoja.style.transformOrigin = 'top left';
+  cont.style.height = (hoja.offsetHeight * esc + 8) + 'px';
+  cont.dataset.fit = '1';
+}
+
+function alternarAjusteHoja(btn){
+  const wrap = btn.closest('.sheet-print-wrap');
+  const cont = wrap && wrap.querySelector('.sheet-scroll');
+  if(!cont) return;
+  const hoja = cont.querySelector('.sheet-page');
+  if(cont.dataset.fit === '1'){
+    hoja.style.transform=''; hoja.style.transformOrigin=''; cont.style.height='';
+    cont.dataset.fit = '';
+    btn.textContent = '🔍 Ajustar a la pantalla';
+  } else {
+    ajustarHoja(cont);
+    btn.textContent = '🔎 Ver tamaño real';
+  }
+}
+
+/* Al abrir cualquier pantalla, las hojas se encogen solas para verse completas */
+function ajustarTodasLasHojas(){
+  document.querySelectorAll('.sheet-print-wrap > .sheet-scroll').forEach(ajustarHoja);
+}
+window.addEventListener('resize', ()=>{
+  clearTimeout(window.__tAjuste);
+  window.__tAjuste = setTimeout(ajustarTodasLasHojas, 250);
+});
 
 /* ---------- Edición con clave de administrador ---------- */
 let editandoFila = null;
