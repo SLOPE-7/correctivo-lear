@@ -266,7 +266,7 @@
     padding:5px 13px;font-size:11.5px;font-weight:700;letter-spacing:.3px;}
   .sp-barra{width:190px;height:3px;background:#ffffff1f;border-radius:3px;margin:26px auto 0;overflow:hidden;}
   .sp-barra i{display:block;height:100%;width:0;background:#e0b400;border-radius:3px;
-    animation:spCarga 1.5s .25s ease-out forwards;}
+    animation:spCarga 2.7s .25s ease-out forwards;}
   .sp-pie{position:absolute;bottom:26px;font-size:11px;color:#6b7280;letter-spacing:.3px;}
   .sp-pie b{color:#8a9099;}
   @keyframes spEntra{ from{opacity:0;transform:scale(.55) rotate(-12deg);} to{opacity:1;transform:scale(1) rotate(0);} }
@@ -326,6 +326,8 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   2.1.0 = archivo de meses anteriores (correctivos y TPM) para mantenimiento, supervisor,
+           auditor y APQP, y armario del mes pasado en el QR de cada UBT
    2.0.0 = la app se llama SIM Lear (Sistema Integral de Mantenimiento) y abre con su
            pantalla de presentación animada
    1.9.0 = líneas asignadas por técnico (exclusivas), registro de actividades del técnico
@@ -360,7 +362,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -830,6 +832,10 @@ async function render(){
       app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderHistorialFocos()}</div>`;
       return;
     }
+    if(STATE.vista === 'archivo'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderArchivo()}</div>`;
+      return;
+    }
     if(STATE.vista === 'lineas_tecnicos'){
       app.innerHTML = renderTopbar() + `<div class="wrap">${await renderLineasTecnicos()}</div>`;
       return;
@@ -945,6 +951,10 @@ async function render(){
     setTimeout(actualizarUbtsPdf, 60);
     return;
   }
+  if(STATE.vista === 'archivo' && ['tecnico','supervisor','auditor','apqp','admin'].includes(STATE.rol)){
+    app.innerHTML = renderTopbar() + `<div class="wrap">${await renderArchivo()}</div>`;
+    return;
+  }
   if(STATE.vista === 'pendientes_firma' && ['auditor','apqp','tecnico','supervisor'].includes(STATE.rol)){
     app.innerHTML = renderTopbar() + `<div class="wrap">${await renderPendientesFirma()}</div>`;
     return;
@@ -987,7 +997,7 @@ async function render(){
   if(esAuditorTipo && STATE.plantaHoy){
     const asignadas = (STATE.usuario.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
     if(asignadas.length===0 || STATE.editandoUbts){
-      app.innerHTML = renderTopbar() + renderUbtsPlantaSetup();
+      app.innerHTML = renderTopbar() + await renderUbtsPlantaSetup();
       return;
     }
   }
@@ -1135,6 +1145,7 @@ function renderMenuInicio(){
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('ambar','✍️','Pendientes de firma','Lo que falta que firmen Calidad y APQP',"abrirVista('pendientes_firma')");
     T('verde wide','📌','Mis UBT / Líneas asignadas','Su TPM y registrar mis actividades',"abrirVista('mis_lineas')");
+    T('gris','🗄️','Archivo','Meses anteriores guardados','abrirArchivo()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='produccion'){
@@ -1150,6 +1161,7 @@ function renderMenuInicio(){
     T('ambar wide','✍️','Pendientes de tu firma','Registros esperando que los firmes',"abrirVista('pendientes_firma')");
     T('','🏠','Mi panel','Vista de hojas','irAPanel()');
     T('azul','🗓️','Hoja TPM',rol==='auditor'?'Revisar y firmar el mes':'Ver e imprimir','abrirTpm()');
+    T('gris','🗄️','Archivo','Meses anteriores','abrirArchivo()');
     if(STATE.plantaHoy) T('','🏭','Cambiar planta',escapeHtml(STATE.plantaHoy),'cambiarPlanta()');
   }
   else if(rol==='supervisor'){
@@ -1160,6 +1172,7 @@ function renderMenuInicio(){
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('ambar','✍️','Pendientes de firma','Lo que falta de Calidad y APQP',"abrirVista('pendientes_firma')");
     T('verde wide','👷','Líneas asignadas de técnicos','Qué lleva cada quien y qué registró','abrirLineasTecnicos()');
+    T('gris','🗄️','Archivo','Correctivos y TPM de meses pasados','abrirArchivo()');
     T('azul wide','📄','Descargar todo en PDF','Correctivos y TPM por planta y UBT',"abrirVista('paquete_pdf')");
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
@@ -1169,6 +1182,7 @@ function renderMenuInicio(){
     T('azul','🗓️','Hoja TPM','Ver e imprimir','abrirTpm()');
     T('','👁️','Ver correctivos y TPM','Todas las plantas','verCorrectivos()');
     T('verde','👷','Líneas de técnicos','Qué lleva cada quien','abrirLineasTecnicos()');
+    T('gris','🗄️','Archivo','Meses anteriores','abrirArchivo()');
     T('azul','📄','Descargar todo en PDF','Correctivos y TPM',"abrirVista('paquete_pdf')");
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
   }
@@ -1521,13 +1535,28 @@ function elegirPlantaHoy(p){ STATE.plantaHoy = p; STATE.ubtElegida = null; rende
 function elegirUbt(u){ STATE.ubtElegida = u; sheetActivaKey = null; render(); }
 
 /* ---------- UBTs asignados — solo de la planta activa (Auditor / APQP) ---------- */
-function renderUbtsPlantaSetup(){
+async function renderUbtsPlantaSetup(){
   const listaUbts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
   const actuales = (STATE.usuario.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
+  const ocupadas = await ocupacionUbts(STATE.plantaHoy, STATE.rol);
+  const etiqueta = STATE.rol === 'apqp' ? 'APQP' : 'Auditor de Calidad';
   return `<div class="wrap"><div class="card">
-    <h2>¿Qué UBT(s) llevas en ${STATE.plantaHoy}?</h2>
+    <h2>¿Qué UBT(s) llevas en ${escapeHtml(STATE.plantaHoy)}?</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+      Máximo ${CUPO_UBT} ${escapeHtml(etiqueta)} por línea. Si ya está cubierta aparece en gris con el nombre de quien la lleva.
+    </p>
     <div class="ubt-check-grid">
-      ${listaUbts.map(u=>`<label><input type="checkbox" class="ubt-chk" value="${u}" ${actuales.includes(u)?'checked':''}> ${u}</label>`).join('')}
+      ${listaUbts.map(u=>{
+        const gente = ocupadas[u] || [];
+        const lleno = gente.length >= CUPO_UBT && !actuales.includes(u);
+        if(lleno){
+          return `<label style="opacity:.5;background:#f0f1f2;" title="${escapeHtml(gente.join(', '))}">
+            <input type="checkbox" disabled> ${escapeHtml(u)}
+            <span style="font-size:9.5px;display:block;color:var(--muted);">${escapeHtml(gente.join(', '))}</span></label>`;
+        }
+        return `<label><input type="checkbox" class="ubt-chk" value="${escapeHtml(u)}" ${actuales.includes(u)?'checked':''}> ${escapeHtml(u)}
+          ${gente.length?`<span style="font-size:9.5px;display:block;color:var(--muted);">con ${escapeHtml(gente.join(', '))}</span>`:''}</label>`;
+      }).join('')}
     </div>
     <button class="btn" onclick="guardarUbtsPlanta()">Guardar${STATE.editandoUbts?' cambios':' y continuar'}</button>
     ${STATE.editandoUbts ? `<button class="btn ghost" style="margin-top:8px;" onclick="STATE.editandoUbts=false;render();">Cancelar</button>` : ''}
@@ -1536,6 +1565,14 @@ function renderUbtsPlantaSetup(){
 async function guardarUbtsPlanta(){
   const seleccion = [...document.querySelectorAll('.ubt-chk:checked')].map(c=>c.value);
   if(seleccion.length===0){ showToast('⚠️ Selecciona al menos un UBT'); return; }
+  /* Se revisa el cupo otra vez por si alguien la tomó mientras tanto */
+  const ocupadas = await ocupacionUbts(STATE.plantaHoy, STATE.rol);
+  const llenas = seleccion.filter(u => (ocupadas[u]||[]).length >= CUPO_UBT);
+  if(llenas.length){
+    showToast(`⚠️ ${llenas[0]} ya está cubierta por ${(ocupadas[llenas[0]]||[]).join(' y ')}`);
+    render();
+    return;
+  }
   if(!STATE.usuario.ubtsPorPlanta) STATE.usuario.ubtsPorPlanta = {};
   STATE.usuario.ubtsPorPlanta[STATE.plantaHoy] = seleccion;
   try{ await saveUsuario(STATE.usuario); }
@@ -1830,6 +1867,40 @@ async function renderVistaUbtPublica(){
   delUbt.forEach(s => (porMaquina[s.maquina] ??= []).push(s));
   const totalRegistros = delUbt.reduce((a,s)=>a+((s.filas||[]).length),0);
 
+  /* Armario: lo del mes que ya cerró, en un desplegable aparte */
+  const mesPasado = mesesAtras(1)[0];
+  const nombreMesPasado = MESES[mesPasado.mes];
+  const delMesPasado = delUbt.filter(x => x.mes === nombreMesPasado && String(x.anio) === String(mesPasado.anio));
+  let archivoTpm = '';
+  for(const maq of MAQ_TPM){
+    const regs = await getTpmMes(planta, ubt, maq, mesPasado.anio, mesPasado.mes);
+    if(regs.length === 0) continue;
+    const marcas = {};
+    regs.forEach(r => { marcas[`${r.fecha}|${letraTurno(r.turno)}`] = r; });
+    const claveF = claveFirmasTpm(planta, ubt, maq, mesPasado.anio, mesPasado.mes);
+    const guardado = await getFirmasTpm(claveF);
+    const imgs = await getImagenesTpm(maq);
+    tpmCtx = { planta, ubt, maquina:maq, anio:mesPasado.anio, mes:mesPasado.mes, marcas,
+               firmas:guardado, comentarios:guardado.comentarios||'', imgs, claveF };
+    archivoTpm += `<div style="margin-top:10px;"><b style="font-size:13px;">🗓️ TPM ${escapeHtml(maq)}</b>
+      <div class="tpm-scroll">${renderHojaTpm()}</div></div>`;
+  }
+  tpmCtx = null;
+
+  const archivoHtml = (delMesPasado.length === 0 && !archivoTpm) ? '' : `
+    <div class="card">
+      <details>
+        <summary style="cursor:pointer;font-weight:800;font-size:15px;padding:10px 12px;background:#2f3742;color:#fff;border-radius:8px;">
+          🗄️ Archivo — ${escapeHtml(nombreMesPasado)} ${mesPasado.anio}
+          <span style="font-weight:400;font-size:12px;opacity:.8;">(${delMesPasado.length} hoja/s de correctivo)</span>
+        </summary>
+        <div style="padding-top:12px;">
+          ${delMesPasado.map(x=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(x,{role:'lectura', publico:true})}</div></div>`).join('')}
+          ${archivoTpm}
+        </div>
+      </details>
+    </div>`;
+
   /* Hojas de TPM del mes en curso, solo lectura */
   let tpmHtml = '';
   for(const maq of MAQ_TPM){
@@ -1869,6 +1940,7 @@ async function renderVistaUbtPublica(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn small secondary" onclick="document.getElementById('bloque_correctivos').scrollIntoView({behavior:'smooth'})">📝 Correctivos</button>
         <button class="btn small ghost" onclick="document.getElementById('bloque_tpm').scrollIntoView({behavior:'smooth'})">🗓️ TPM</button>
+        <button class="btn small ghost" onclick="document.getElementById('bloque_archivo').scrollIntoView({behavior:'smooth'})">🗄️ Mes anterior</button>
       </div>
     </div>
     <div id="bloque_correctivos">
@@ -1879,6 +1951,7 @@ async function renderVistaUbtPublica(){
             ${porMaquina[maq].map(s=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(s,{role:'lectura', publico:true})}</div></div>`).join('')}
           </div>`).join('')}
     </div>
+    <div id="bloque_archivo">${archivoHtml}</div>
     <div id="bloque_tpm">
       ${tpmHtml || '<div class="card"><div class="empty">Todavía no hay TPM registrado este mes en esta UBT.</div></div>'}
     </div>
@@ -1990,10 +2063,11 @@ async function renderProduccion(){
   const esOperador = sub === 'operador';
 
   if(esOperador && !STATE.usuario?.maquina){
+    const ocupadas = await ocupacionMaquinas(STATE.plantaHoy, STATE.ubtElegida);
     return `<div class="card">
       <h2>⚙️ ¿En qué máquina trabajas?</h2>
       <p style="font-size:13px;color:var(--muted);margin-top:-8px;">Selecciona tu máquina en la UBT ${escapeHtml(STATE.ubtElegida||'')}. Solo se pide una vez.</p>
-      <div class="field"><select id="prod_maquina">${MAQ_COR.map(m=>`<option>${m}</option>`).join('')}</select></div>
+      ${selectorMaquinaOcupacion(ocupadas, 'prod_maquina')}
       <button class="btn" onclick="guardarMaquinaOperador()">Guardar y continuar</button>
     </div>`;
   }
@@ -2042,13 +2116,68 @@ async function renderProduccion(){
   </div>` : ''}`;
 }
 
+/* ---------- Cupos: máximo 2 personas por máquina y por UBT ----------
+   Evita que cualquiera con el enlace se cargue en una línea que ya está cubierta. */
+const CUPO_MAQUINA = 2;   /* operadores por máquina de una UBT */
+const CUPO_UBT     = 2;   /* auditores o APQP por UBT */
+
+async function ocupacionMaquinas(planta, ubt){
+  const usuarios = await listUsuarios();
+  const mapa = {};
+  usuarios
+    .filter(u => u.rol === 'produccion'
+      && (u.subrol || 'operador') === 'operador'
+      && !u.bloqueado
+      && slug(u.nombre) !== slug(STATE.nombre)
+      && ((u.ubtsPorPlanta||{})[planta]||[]).includes(ubt)
+      && u.maquina)
+    .forEach(u => { (mapa[u.maquina] ??= []).push(u.nombre); });
+  return mapa;
+}
+
+async function ocupacionUbts(planta, rol){
+  const usuarios = await listUsuarios();
+  const mapa = {};
+  usuarios
+    .filter(u => u.rol === rol && !u.bloqueado && slug(u.nombre) !== slug(STATE.nombre))
+    .forEach(u => ((u.ubtsPorPlanta||{})[planta]||[]).forEach(ubt => { (mapa[ubt] ??= []).push(u.nombre); }));
+  return mapa;
+}
+
+/* Dibuja el selector de máquina mostrando quién ya está en cada una */
+function selectorMaquinaOcupacion(ocupadas, idSelect){
+  return `<div class="field"><label>Máquina</label>
+    <select id="${idSelect}">
+      ${MAQ_COR.map(m=>{
+        const gente = ocupadas[m] || [];
+        const lleno = gente.length >= CUPO_MAQUINA;
+        const nota = gente.length ? ` — ${gente.join(', ')} (${gente.length}/${CUPO_MAQUINA})` : '';
+        return `<option value="${escapeHtml(m)}" ${lleno?'disabled':''}>${escapeHtml(m)}${escapeHtml(nota)}${lleno?' · LLENA':''}</option>`;
+      }).join('')}
+    </select>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:4px;">
+      Máximo ${CUPO_MAQUINA} operadores por máquina. Las que ya están llenas no se pueden elegir.
+    </div>
+  </div>`;
+}
+
 function misUbtsProd(){
   const a = STATE.usuario?.ubtsPorPlanta || {};
   return a[STATE.plantaHoy] || [];
 }
 
 async function guardarMaquinaOperador(){
-  STATE.usuario.maquina = document.getElementById('prod_maquina').value;
+  const maq = document.getElementById('prod_maquina').value;
+  if(!maq){ showToast('⚠️ Elige una máquina'); return; }
+  /* Se vuelve a revisar el cupo por si alguien la tomó mientras tanto */
+  const ocupadas = await ocupacionMaquinas(STATE.plantaHoy, STATE.ubtElegida);
+  const gente = ocupadas[maq] || [];
+  if(gente.length >= CUPO_MAQUINA){
+    showToast(`⚠️ Esa máquina ya está cubierta por ${gente.join(' y ')}`);
+    render();
+    return;
+  }
+  STATE.usuario.maquina = maq;
   await saveUsuario(STATE.usuario);
   showToast('Máquina guardada ✓');
   render();
@@ -3856,6 +3985,132 @@ async function generarPaquetePdf(que){
   v.document.close(); v.focus();
   if(est) est.textContent = `✓ Documento listo: ${nCorr} hoja(s) de correctivo y ${nTpm} de TPM.`;
   setTimeout(()=>v.print(), 900);
+}
+
+/* ================= ARCHIVO: los meses que ya cerraron ================= */
+/* Devuelve los últimos N meses hacia atrás, empezando por el anterior al actual */
+function mesesAtras(n){
+  const out = [];
+  const hoy = ahora();
+  for(let i=1; i<=n; i++){
+    const d = new Date(hoy.getFullYear(), hoy.getMonth()-i, 1);
+    out.push({ mes:d.getMonth(), anio:d.getFullYear(), etiqueta: MESES[d.getMonth()] + ' ' + d.getFullYear() });
+  }
+  return out;
+}
+
+function abrirArchivo(){
+  const prev = mesesAtras(1)[0];
+  STATE.arch = STATE.arch || { planta: STATE.plantaHoy || '', ubt:'', mes: prev.mes, anio: prev.anio };
+  STATE.vista = 'archivo';
+  render();
+}
+function cambiarArchivo(){
+  const g = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+  const [mes, anio] = g('arch_mes').split('-');
+  STATE.arch = { planta: g('arch_planta'), ubt: g('arch_ubt'), mes: Number(mes), anio: Number(anio) };
+  render();
+}
+function elegirPlantaArchivo(p){
+  STATE.arch = { ...(STATE.arch||{}), planta:p, ubt:'' };
+  render();
+}
+
+async function renderArchivo(){
+  const volver = `<div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>`;
+  const a = STATE.arch || {};
+  const rol = STATE.rol;
+
+  /* Qué plantas puede ver cada rol */
+  const vePlantas = ['supervisor','admin'].includes(rol);
+  if(!a.planta){
+    if(!vePlantas && STATE.plantaHoy){ STATE.arch = { ...a, planta: STATE.plantaHoy }; }
+    else {
+      return `${volver}<div class="card">
+        <h2>🗄️ Archivo de meses anteriores</h2>
+        <p style="font-size:13.5px;">Elige la planta.</p>
+        <div class="planta-grid">${PLANTA_NOMBRES.map(p=>`<div class="planta-card" onclick="elegirPlantaArchivo('${escArg(p)}')">${escapeHtml(p)}</div>`).join('')}</div>
+      </div>`;
+    }
+  }
+  const planta = STATE.arch.planta;
+
+  /* Qué líneas puede ver */
+  let ubtsDisp;
+  if(rol === 'auditor' || rol === 'apqp'){
+    ubtsDisp = (STATE.usuario?.ubtsPorPlanta||{})[planta] || [];
+  } else {
+    ubtsDisp = ubtsDeLaPlanta(STATE.plantasCfg, planta);
+  }
+
+  const meses = mesesAtras(12);
+  const sel = STATE.arch;
+  if(sel.mes === undefined) { sel.mes = meses[0].mes; sel.anio = meses[0].anio; }
+  const nombreMes = MESES[sel.mes];
+
+  /* Correctivos de ese mes */
+  let hojas = await listSheets({ planta });
+  hojas = hojas.filter(h => h.planta===planta && h.mes===nombreMes && String(h.anio)===String(sel.anio));
+  if(sel.ubt) hojas = hojas.filter(h => h.ubtNo===sel.ubt);
+  if(rol==='auditor' || rol==='apqp') hojas = hojas.filter(h => ubtsDisp.includes(h.ubtNo));
+
+  const porUbt = {};
+  hojas.forEach(h => (porUbt[h.ubtNo] ??= []).push(h));
+
+  /* TPM de ese mes: solo si se eligió una línea, para no hacer decenas de consultas */
+  let tpmHtml = '';
+  if(sel.ubt){
+    for(const maq of MAQ_TPM){
+      const regs = await getTpmMes(planta, sel.ubt, maq, sel.anio, sel.mes);
+      if(regs.length === 0) continue;
+      const marcas = {};
+      regs.forEach(r => { marcas[`${r.fecha}|${letraTurno(r.turno)}`] = r; });
+      const claveF = claveFirmasTpm(planta, sel.ubt, maq, sel.anio, sel.mes);
+      const guardado = await getFirmasTpm(claveF);
+      const imgs = await getImagenesTpm(maq);
+      tpmCtx = { planta, ubt:sel.ubt, maquina:maq, anio:sel.anio, mes:sel.mes, marcas,
+                 firmas:guardado, comentarios:guardado.comentarios||'', imgs, claveF };
+      tpmHtml += `<div class="card"><h2>🗓️ TPM ${escapeHtml(maq)}</h2>
+        <div class="tpm-scroll">${renderHojaTpm()}</div></div>`;
+    }
+    tpmCtx = null;
+  }
+
+  const totalReg = hojas.reduce((n,h)=>n+((h.filas||[]).length),0);
+
+  return `
+  ${volver}
+  <div class="card no-print">
+    <h2>🗄️ Archivo — ${escapeHtml(nombreMes)} ${sel.anio}</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+      Aquí quedan guardados los correctivos y el TPM de los meses que ya cerraron. Nada se borra al cambiar de mes.
+    </p>
+    <div class="filters" style="margin-bottom:0;">
+      ${vePlantas ? `<select id="arch_planta" onchange="cambiarArchivo()">
+        ${PLANTA_NOMBRES.map(p=>`<option ${p===planta?'selected':''}>${escapeHtml(p)}</option>`).join('')}</select>`
+        : `<input type="hidden" id="arch_planta" value="${escapeHtml(planta)}">
+           <span style="font-size:13px;font-weight:700;align-self:center;">${escapeHtml(planta)}</span>`}
+      <select id="arch_ubt" onchange="cambiarArchivo()">
+        <option value="">Todas las UBT</option>
+        ${ubtsDisp.map(u=>`<option ${u===sel.ubt?'selected':''}>${escapeHtml(u)}</option>`).join('')}
+      </select>
+      <select id="arch_mes" onchange="cambiarArchivo()">
+        ${meses.map(m=>`<option value="${m.mes}-${m.anio}" ${(m.mes===sel.mes && m.anio===sel.anio)?'selected':''}>${m.etiqueta}</option>`).join('')}
+      </select>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);margin-top:10px;">
+      ${hojas.length} hoja(s) de correctivo · ${totalReg} registro(s)${sel.ubt?'':' · elige una UBT para ver también su TPM'}
+    </div>
+  </div>
+
+  ${hojas.length === 0 ? '<div class="card"><div class="empty">No hay correctivos guardados de ese mes.</div></div>' :
+    Object.keys(porUbt).sort().map(ubt=>`
+      <div class="card">
+        <h2>📍 UBT ${escapeHtml(ubt)} <span style="font-weight:400;font-size:12.5px;color:var(--muted);">(${porUbt[ubt].length} hoja/s)</span></h2>
+        ${porUbt[ubt].map(h=>`<div class="sheet-print-wrap"><div class="sheet-scroll">${renderSheetVisual(h,{role:'lectura'})}</div></div>`).join('')}
+      </div>`).join('')}
+
+  ${tpmHtml}`;
 }
 
 /* ---------- Ver correctivos (solo lectura) ---------- */
@@ -6071,10 +6326,10 @@ function iniciarSplash(){
   const cont = document.getElementById('sp_logo');
   if(cont) cont.innerHTML = logoSim();
   sp.addEventListener('click', ocultarSplash);      /* tocar para saltarla */
-  setTimeout(ocultarSplash, 1900);
+  setTimeout(ocultarSplash, 3200);
   /* Candado: pase lo que pase, la pantalla nunca deja la app bloqueada */
   setTimeout(ocultarSplash, 5000);
-  window.addEventListener('load', ()=>setTimeout(ocultarSplash, 1200));
+  window.addEventListener('load', ()=>setTimeout(ocultarSplash, 2600));
 }
 
 /* ---------- Init ---------- */
