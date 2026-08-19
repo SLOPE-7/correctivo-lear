@@ -185,6 +185,9 @@
   .pie-marca{text-align:center;font-size:10.5px;color:#9aa1a9;opacity:.65;padding:14px 10px 20px;letter-spacing:.3px;user-select:none;}
   .pie-marca b{font-weight:700;color:#8a9099;}
   /* --- Hoja TPM (formato de piso) --- */
+  .causa-caja{background:#fff7e6;border:1px solid #f0c674;border-radius:10px;padding:12px;margin:6px 0 12px;}
+  .causa-etiqueta{display:inline-block;background:#fff4d6;color:#a16d07;border:1px solid #f0c674;
+    border-radius:12px;padding:1px 7px;font-size:9px;font-weight:700;margin-top:3px;}
   .ref-sug{border:1px solid #d9dde1;border-radius:9px;margin-top:6px;max-height:230px;overflow-y:auto;background:#fff;}
   .ref-op{display:flex;align-items:baseline;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid #f0f2f4;font-size:12.5px;}
   .ref-op:last-child{border-bottom:none;}
@@ -326,6 +329,11 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   2.6.0 = el técnico puede marcar que la causa no era de mantenimiento (arnés, error de
+           operación, material...): el tiempo se registra pero se contabiliza aparte y no
+           ensucia el tiempo muerto de la máquina
+   2.5.0 = focos Andon: pantalla de administrador para configurar la caja de relés de
+           cada bahía y ver si su PC está conectada
    2.4.0 = las hojas se encogen solas para verse completas (ya no quedan cortadas por el
            desplazamiento), con botón para volver al tamaño real
    2.3.0 = impresión corregida: correctivos siempre horizontal y TPM siempre vertical,
@@ -368,7 +376,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.6.0';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -403,6 +411,21 @@ const TPM_ACTIVIDADES = [
   { id:'a7', sub:'Limpieza de Monitor',   texto:'Realizar limpieza de monitor y/o Dynalab de la mesa, utilizando un trapo.' },
   { id:'a8', sub:'Apagado de Equipo',     texto:'Asegúrate de apagar tu equipo si tu línea no trabaja el siguiente turno.' }
 ];
+
+/* Cuando el técnico llega y resulta que la falla no era de la máquina.
+   El tiempo se sigue registrando, pero no cuenta como tiempo muerto de mantenimiento. */
+const CAUSAS_EXTERNAS = [
+  { id:'arnes',     label:'Defecto del arnés',            desc:'El arnés venía mal de una operación anterior' },
+  { id:'operador',  label:'Error de operación',           desc:'No se revisó el trabajo antes de correrlo' },
+  { id:'material',  label:'Material o componente malo',   desc:'Pieza defectuosa que no depende de la máquina' },
+  { id:'metodo',    label:'Método o ajuste de producción',desc:'Cambio de modelo, ajuste o secuencia' },
+  { id:'sin_falla', label:'No se encontró falla',          desc:'La máquina trabajaba bien al llegar' },
+  { id:'otro',      label:'Otro (se especifica)',          desc:'' }
+];
+function etiquetaCausa(id){
+  const c = CAUSAS_EXTERNAS.find(x=>x.id===id);
+  return c ? c.label : '';
+}
 
 const EXTRAS_FOCO = ['Pull System','Tablero de Construcción','Socar elevadores','Revisión de fixturas','Carritos de Pull','Resorte en fingers'];
 function maquinasParaFoco(){ return [...MAQ_COR, ...EXTRAS_FOCO]; }
@@ -847,6 +870,10 @@ async function render(){
       app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderHistorialFocos()}</div>`;
       return;
     }
+    if(STATE.vista === 'andon'){
+      app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderAndon()}</div>`;
+      return;
+    }
     if(STATE.vista === 'archivo'){
       app.innerHTML = renderTopbar() + `<div class="wrap">${barraInicio()}${await renderArchivo()}</div>`;
       return;
@@ -1087,8 +1114,8 @@ function barraInicio(){
 }
 function volverDeVerTodo(){ STATE.viendoTodo = false; render(); }
 function guardarBorradorRegistro(){
-  const ids = ['f_fecha','f_hi','f_hf','f_gafete','f_sintomas','f_acciones','f_material','f_turno'];
-  const chk = ['f_movio','f_verifico','f_solicitar_apqp','f_extra'];
+  const ids = ['f_fecha','f_hi','f_hf','f_gafete','f_sintomas','f_acciones','f_material','f_turno','f_causa','f_causa_otro'];
+  const chk = ['f_movio','f_verifico','f_solicitar_apqp','f_extra','f_externa'];
   const b = {};
   let hayAlgo = false;
   ids.forEach(id=>{ const el=document.getElementById(id); if(el){ b[id]=el.value; if(['f_sintomas','f_acciones','f_material'].includes(id) && el.value.trim()) hayAlgo=true; } });
@@ -1109,6 +1136,7 @@ function restaurarBorradorRegistro(){
     if(!el) return;
     if(el.type === 'checkbox') el.checked = !!val; else el.value = val;
   });
+  alternarCausaExterna();
   validarTiempos();
   showToast('✓ Se recuperó lo que tenías escrito');
   STATE.borradorRegistro = null;
@@ -1203,6 +1231,7 @@ function renderMenuInicio(){
     T('gris','🗄️','Archivo','Meses anteriores','abrirArchivo()');
     T('azul','📄','Descargar todo en PDF','Correctivos y TPM',"abrirVista('paquete_pdf')");
     T('','🖼️','Ayudas visuales TPM','Fotos de las actividades','abrirImagenesTpm()');
+    T('ambar wide','🚦','Focos Andon por bahía','Configurar las cajas de relés','abrirAndon()');
   }
 
   if(puedeVerHistorialFocos()) T('azul wide','📑','Registros de solicitudes','Veces, horas y tiempo de reparación',"abrirVista('historial')");
@@ -1686,6 +1715,28 @@ async function renderTecnico(){
           <button class="btn small ghost" type="button" onclick="document.getElementById('ref_nueva').style.display='none'">Cancelar</button>
         </div>
       </div>
+      <div class="causa-caja no-print">
+        <label class="checkline" style="margin-bottom:0;">
+          <input type="checkbox" id="f_externa" onchange="alternarCausaExterna()">
+          <b>⚠️ La causa NO fue de mantenimiento</b>
+        </label>
+        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 0 26px;">
+          Márcalo si al llegar resultó ser un defecto de arnés, un error de operación u otra cosa
+          ajena a la máquina. El tiempo se registra igual, pero no cuenta como tiempo muerto de mantenimiento.
+        </div>
+        <div id="causa_detalle" style="display:none;margin-top:10px;">
+          <div class="field" style="margin-bottom:8px;">
+            <label>¿Cuál fue la causa?</label>
+            <select id="f_causa" onchange="alternarCausaExterna()">
+              ${CAUSAS_EXTERNAS.map(c=>`<option value="${c.id}">${escapeHtml(c.label)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" id="causa_otro_wrap" style="display:none;margin-bottom:0;">
+            <label>Especifica</label>
+            <input id="f_causa_otro" placeholder="Describe brevemente la causa">
+          </div>
+        </div>
+      </div>
       <label class="checkline"><input type="checkbox" id="f_movio"> Se movió módulo de posición</label>
       <label class="checkline"><input type="checkbox" id="f_verifico"> Se verificó módulo quede en cuadrante especificado</label>
       <label class="checkline"><input type="checkbox" id="f_solicitar_apqp"> 📩 Solicitar firma de APQP (le da acceso a este registro)</label>
@@ -1761,6 +1812,9 @@ async function agregarFila(){
     gafete: document.getElementById('f_gafete').value.trim(),
     sintomas, acciones: document.getElementById('f_acciones').value.trim(),
     material: document.getElementById('f_material').value.trim(),
+    causaExterna: document.getElementById('f_externa').checked ? document.getElementById('f_causa').value : '',
+    causaExternaNota: (document.getElementById('f_externa').checked && document.getElementById('f_causa').value==='otro')
+        ? document.getElementById('f_causa_otro').value.trim() : '',
     seMovioModulo: document.getElementById('f_movio').checked,
     seVerificoModulo: document.getElementById('f_verifico').checked,
     tecnico: STATE.nombre,
@@ -4131,6 +4185,163 @@ async function renderArchivo(){
   ${tpmHtml}`;
 }
 
+/* ================= ANDON: focos físicos por bahía ================= */
+/* Cada bahía tiene una PC con una caja de relés. Aquí se le dice a esa caja
+   qué relé enciende el foco y qué UBT corresponde a cada interruptor. */
+
+function claveAndon(planta, bahia){ return `andon:${slug(planta)}:${bahia}`; }
+function claveAndonEstado(planta, bahia){ return `andonestado:${slug(planta)}:${bahia}`; }
+
+async function getConfigAndon(planta){
+  try{
+    const r = await sbFetch('config?clave=like.' + encodeURIComponent('andon:'+slug(planta)+':*') + '&select=clave,valor');
+    const mapa = {};
+    (r||[]).forEach(x => { const b = x.clave.split(':')[2]; mapa[b] = x.valor || {}; });
+    return mapa;
+  }catch(e){ console.warn(e); return {}; }
+}
+async function getEstadoAndon(planta){
+  try{
+    const r = await sbFetch('config?clave=like.' + encodeURIComponent('andonestado:'+slug(planta)+':*') + '&select=clave,valor');
+    const mapa = {};
+    (r||[]).forEach(x => { const b = x.clave.split(':')[2]; mapa[b] = x.valor || {}; });
+    return mapa;
+  }catch(e){ return {}; }
+}
+async function saveConfigAndon(planta, bahia, valor){
+  await sbFetch('config?on_conflict=clave', {
+    method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
+    body: JSON.stringify({ clave: claveAndon(planta, bahia), valor, actualizado_en: ahoraISO() })
+  });
+}
+
+/* Todas las bahías de una planta, sacadas de sus UBT */
+function bahiasDePlanta(planta){
+  const ubts = ubtsDeLaPlanta(STATE.plantasCfg, planta);
+  const mapa = {};
+  ubts.forEach(u => (mapa[bahiaDeUbt(u)] ??= []).push(u));
+  return Object.keys(mapa).sort((a,b)=>Number(a)-Number(b)).map(b => ({ bahia:b, ubts:mapa[b] }));
+}
+
+function abrirAndon(){
+  STATE.andonPlanta = STATE.andonPlanta || PLANTA_NOMBRES[0];
+  STATE.vista = 'andon';
+  render();
+}
+function cambiarPlantaAndon(){
+  STATE.andonPlanta = document.getElementById('andon_planta').value;
+  render();
+}
+
+async function renderAndon(){
+  const planta = STATE.andonPlanta || PLANTA_NOMBRES[0];
+  const bahias = bahiasDePlanta(planta);
+  const conf = await getConfigAndon(planta);
+  const estado = await getEstadoAndon(planta);
+
+  const enLinea = b => {
+    const e = estado[b];
+    if(!e || !e.visto_en) return null;
+    const min = Math.floor((ahoraMs() - new Date(e.visto_en).getTime())/60000);
+    return { min, ...e };
+  };
+
+  const conPuente = bahias.filter(x => enLinea(x.bahia) && enLinea(x.bahia).min < 3).length;
+
+  return `
+  <div class="card no-print"><button class="btn ghost small" onclick="irInicio()">← Volver</button></div>
+  <div class="card">
+    <h2>🚦 Focos Andon por bahía</h2>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
+      Cada bahía tiene una PC con su caja de relés. Aquí se le indica qué relé enciende el foco amarillo
+      y qué línea corresponde a cada interruptor. Los cambios llegan a la PC en menos de un minuto,
+      sin tener que ir a la bahía.
+    </p>
+    <div class="filters" style="margin-bottom:10px;">
+      <select id="andon_planta" onchange="cambiarPlantaAndon()">
+        ${PLANTA_NOMBRES.map(p=>`<option ${p===planta?'selected':''}>${escapeHtml(p)}</option>`).join('')}
+      </select>
+      <button class="btn small ghost" onclick="render()">🔄 Actualizar estado</button>
+    </div>
+    <div style="background:#f3f6f9;border-radius:9px;padding:11px;font-size:13px;">
+      ${bahias.length} bahía(s) en ${escapeHtml(planta)} · <b style="color:${conPuente?'#1a7a3c':'#a13636'};">${conPuente} con la PC conectada</b>
+    </div>
+  </div>
+
+  ${bahias.map(({bahia, ubts})=>{
+    const c = conf[bahia] || {};
+    const e = enLinea(bahia);
+    const viva = e && e.min < 3;
+    const entradas = c.entradas || {};
+    return `
+    <div class="card" style="border-left:5px solid ${viva?'#1a7a3c':'#c9ced4'};">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;">
+        <h2 style="margin:0;">🏭 Bahía ${escapeHtml(bahia)}
+          <span style="font-weight:400;font-size:12.5px;color:var(--muted);">· ${ubts.length} línea(s)</span></h2>
+        <div>
+          ${viva
+            ? `<span class="badge-est act">● PC conectada</span>
+               <span class="badge-est ${e.foco?'esp':'fin'}">${e.foco?'💡 Foco encendido':'Foco apagado'}</span>`
+            : `<span class="badge-est bloq">○ Sin señal${e?` · hace ${e.min} min`:''}</span>`}
+        </div>
+      </div>
+      ${viva ? `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">
+        Puerto ${escapeHtml(e.puerto||'?')} · caja ${e.caja_ok?'respondiendo':'<b style="color:#a13636;">sin responder</b>'} ·
+        entradas ${escapeHtml(e.entradas||'0000')} · puente v${escapeHtml(e.version||'?')}
+      </div>` : `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">
+        La PC de esta bahía todavía no reporta. Revisa que el programa esté corriendo.
+      </div>`}
+
+      <div class="row2" style="margin-top:12px;">
+        <div class="field"><label>Relé que enciende el foco</label>
+          <select id="an_rele_${bahia}">
+            ${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}" ${String(c.rele_foco||1)===String(n)?'selected':''}>Relé ${n}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Nombre del equipo en la solicitud</label>
+          <input id="an_maq_${bahia}" value="${escapeHtml(c.maquina||'Línea')}" placeholder="Ej. Línea">
+        </div>
+      </div>
+
+      <div style="font-size:12.5px;font-weight:700;color:var(--muted);margin:6px 0 6px;">
+        ¿Qué línea enciende cada interruptor?
+      </div>
+      <div class="row2">
+        ${[1,2,3,4].map(n=>`
+          <div class="field">
+            <label>Entrada ${n}</label>
+            <select id="an_ent_${bahia}_${n}">
+              <option value="">— sin usar —</option>
+              ${ubts.map(u=>`<option ${((entradas[String(n)]||'')===u)?'selected':''}>${escapeHtml(u)}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+
+      <label class="checkline"><input type="checkbox" id="an_act_${bahia}" ${c.activo===false?'':'checked'}> Bahía activa</label>
+      <button class="btn small secondary" onclick="guardarAndon('${escArg(planta)}','${escArg(bahia)}')">💾 Guardar bahía ${escapeHtml(bahia)}</button>
+      <span id="an_ok_${bahia}" style="font-size:12.5px;color:var(--green);margin-left:8px;"></span>
+    </div>`;
+  }).join('')}`;
+}
+
+async function guardarAndon(planta, bahia){
+  const g = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+  const entradas = {};
+  [1,2,3,4].forEach(n => { entradas[String(n)] = g(`an_ent_${bahia}_${n}`); });
+  const valor = {
+    planta, bahia,
+    rele_foco: Number(g(`an_rele_${bahia}`)) || 1,
+    maquina: g(`an_maq_${bahia}`) || 'Línea',
+    entradas,
+    activo: document.getElementById(`an_act_${bahia}`).checked
+  };
+  try{ await saveConfigAndon(planta, bahia, valor); }
+  catch(err){ showToast('⚠️ '+(err.message||err)); return; }
+  const ok = document.getElementById(`an_ok_${bahia}`);
+  if(ok) ok.textContent = '✓ Guardado — la PC lo toma en menos de 1 minuto';
+  showToast(`Bahía ${bahia} guardada ✓`);
+}
+
 /* ---------- Ver correctivos (solo lectura) ---------- */
 let sheetsCacheVerTodo = [];
 async function renderVerCorrectivos(){
@@ -4325,6 +4536,17 @@ function ajustarHoja(cont){
   cont.dataset.fit = '1';
 }
 
+/* Muestra el detalle de la causa solo si se marcó la casilla */
+function alternarCausaExterna(){
+  const chk = document.getElementById('f_externa');
+  const caja = document.getElementById('causa_detalle');
+  const otro = document.getElementById('causa_otro_wrap');
+  const sel = document.getElementById('f_causa');
+  if(!chk || !caja) return;
+  caja.style.display = chk.checked ? 'block' : 'none';
+  if(otro && sel) otro.style.display = (chk.checked && sel.value === 'otro') ? 'flex' : 'none';
+}
+
 function alternarAjusteHoja(btn){
   const wrap = btn.closest('.sheet-print-wrap');
   const cont = wrap && wrap.querySelector('.sheet-scroll');
@@ -4439,7 +4661,7 @@ function renderSheetVisual(sheet, opts){
       <td>${escapeHtml(f.gafete)}</td>
       <td>${escapeHtml(f.horaInicio||'')}</td>
       <td>${escapeHtml(f.horaFinal||'')}</td>
-      <td class="left">${escapeHtml(f.sintomas)}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:7.5px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td>
+      <td class="left">${escapeHtml(f.sintomas)}${f.causaExterna?`<br><span class="causa-etiqueta no-print">Fuera de mantto: ${escapeHtml(etiquetaCausa(f.causaExterna))}${f.causaExternaNota?(' — '+escapeHtml(f.causaExternaNota)):''}</span>`:''}${f.foto?`<br><span class="no-print" style="cursor:pointer;font-size:7.5px;color:#0f3d5c;" onclick="verFoto('${f.id}')">📷 Ver foto</span><img id="foto_${f.id}" src="${f.foto}" style="display:none;max-width:120px;margin-top:4px;border-radius:4px;">`:''}</td>
       <td class="left">${escapeHtml(f.acciones)}</td>
       <td class="left">${escapeHtml(f.numeroParte || f.material || '')}</td>
       <td>${f.firmaTecnicoImg?`<img src="${f.firmaTecnicoImg}" style="max-width:70px;max-height:26px;"><br><span style="font-size:7px;">${escapeHtml(f.tecnico)}</span>`:escapeHtml(f.tecnico)}</td>
@@ -5870,6 +6092,7 @@ function ejecutarBusqueda(){
         <div><b>Falla:</b> ${escapeHtml(f.sintomas||'')}</div>
         <div><b>Acción:</b> ${escapeHtml(f.acciones||'—')}</div>
         ${f.numeroParte?`<div><b>No. Parte:</b> ${escapeHtml(f.numeroParte)}</div>`:''}
+        ${f.causaExterna?`<div style="margin-top:4px;"><span class="causa-etiqueta">⚠️ Fuera de mantenimiento: ${escapeHtml(etiquetaCausa(f.causaExterna))}</span></div>`:''}
       </div>`).join('') +
     (res.length>60?'<div class="empty">Mostrando los primeros 60 resultados. Afina tu búsqueda.</div>':'');
 }
@@ -5886,6 +6109,37 @@ function calcularTiempoMuerto(){
   if(mes) filas = filas.filter(f=>f.mes===mes);
 
   if(filas.length === 0){ cont.innerHTML = '<div class="empty">Sin datos para este filtro.</div>'; return; }
+
+  /* Lo que resultó ser ajeno a mantenimiento se cuenta aparte, no como tiempo muerto de la máquina */
+  const ajenas = filas.filter(f => f.causaExterna);
+  filas = filas.filter(f => !f.causaExterna);
+  const minAjenas = ajenas.reduce((a,f)=>a+(f.minutosParo||0),0);
+  const porCausa = {};
+  ajenas.forEach(f => {
+    const k = f.causaExterna;
+    porCausa[k] ??= { minutos:0, veces:0 };
+    porCausa[k].minutos += (f.minutosParo||0);
+    porCausa[k].veces++;
+  });
+  const bloqueAjenas = ajenas.length === 0 ? '' : `
+    <div style="background:#fff7e6;border:1px solid #f0c674;border-radius:9px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:13.5px;font-weight:800;color:#a16d07;">
+        ⚠️ Fuera de mantenimiento: ${formatoDuracion(minAjenas)} en ${ajenas.length} atención(es)
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin:4px 0 8px;">
+        El técnico acudió, pero la causa no era de la máquina. Este tiempo NO se suma al tiempo muerto de mantenimiento.
+      </div>
+      ${Object.entries(porCausa).sort((a,b)=>b[1].minutos-a[1].minutos).map(([k,v])=>`
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;">
+          <span>${escapeHtml(etiquetaCausa(k))}</span>
+          <span><b>${formatoDuracion(v.minutos)}</b> <span style="color:var(--muted);">· ${v.veces} vez/veces</span></span>
+        </div>`).join('')}
+    </div>`;
+
+  if(filas.length === 0){
+    cont.innerHTML = bloqueAjenas + '<div class="empty">Todo el tiempo del periodo resultó ajeno a mantenimiento.</div>';
+    return;
+  }
 
   /* Agrupar: Planta > UBT > Máquina */
   const arbol = {};
@@ -5907,9 +6161,9 @@ function calcularTiempoMuerto(){
   const barra = (min, max, color) => `<div style="background:#e8eaed;border-radius:20px;height:8px;overflow:hidden;margin-top:3px;">
       <div style="background:${color};height:100%;width:${(min/max*100).toFixed(1)}%;"></div></div>`;
 
-  cont.innerHTML = `
+  cont.innerHTML = bloqueAjenas + `
     <div style="background:#f3f6f9;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13.5px;">
-      Total de paro: <b>${formatoDuracion(totalMin)}</b> (${totalMin} min) en <b>${filas.length}</b> intervención(es)
+      Tiempo muerto <b>de mantenimiento</b>: <b>${formatoDuracion(totalMin)}</b> (${totalMin} min) en <b>${filas.length}</b> intervención(es)
     </div>
     ${plantasOrd.map(([pl, dPl])=>{
       const ubtsOrd = Object.entries(dPl.ubts).sort((a,b)=>b[1].minutos-a[1].minutos);
@@ -5951,6 +6205,7 @@ function calcularFallasFrecuentes(){
   let filas = todasLasFilas();
   /* El técnico solo ve las fallas de su planta */
   if(STATE.rol === 'tecnico' && STATE.plantaHoy) filas = filas.filter(f=>f.planta===STATE.plantaHoy);
+  filas = filas.filter(f => !f.causaExterna);   /* lo ajeno no es falla de la máquina */
   const porMaquina = {};
   filas.forEach(f=>{
     const clave = `${f.maquina} · UBT ${f.ubtNo}`;
@@ -6015,11 +6270,12 @@ function descargarCSV(nombre, filas){
 
 async function exportarCSV(tipo){
   if(tipo === 'registros'){
-    const filas = [['Fecha','Planta','UBT','Maquina','Mes','Anio','Gafete','Tecnico','Hora Inicio','Hora Final','Minutos Paro','Sintomas','Acciones','Material','No. Parte','Firma Auditor','Firma APQP']];
+    const filas = [['Fecha','Planta','UBT','Maquina','Mes','Anio','Gafete','Tecnico','Hora Inicio','Hora Final','Minutos Paro','Sintomas','Acciones','Material','No. Parte','Causa fuera de mantto','Detalle causa','Firma Auditor','Firma APQP']];
     todasLasFilas().forEach(f=>filas.push([
       f.fecha||'', f.planta||'', f.ubtNo||'', f.maquina||'', f.mes||'', f.anio||'',
       f.gafete||'', f.tecnico||'', f.horaInicio||'', f.horaFinal||'', f.minutosParo||0,
       f.sintomas||'', f.acciones||'', f.material||'', f.numeroParte||'',
+      f.causaExterna?etiquetaCausa(f.causaExterna):'', f.causaExternaNota||'',
       f.firmaAuditorNombre||'', f.firmaAPQPNombre||''
     ]));
     descargarCSV('correctivos-registros-'+todayISO()+'.csv', filas);
@@ -6028,14 +6284,20 @@ async function exportarCSV(tipo){
     const porMaquina = {};
     todasLasFilas().forEach(f=>{
       const clave = `${f.planta}|${f.ubtNo}|${f.maquina}`;
-      porMaquina[clave] ??= { minutos:0, paros:0 };
-      porMaquina[clave].minutos += (f.minutosParo||0);
-      porMaquina[clave].paros++;
+      porMaquina[clave] ??= { minutos:0, paros:0, ajenos:0, parosAjenos:0 };
+      if(f.causaExterna){
+        porMaquina[clave].ajenos += (f.minutosParo||0);
+        porMaquina[clave].parosAjenos++;
+      } else {
+        porMaquina[clave].minutos += (f.minutosParo||0);
+        porMaquina[clave].paros++;
+      }
     });
-    const filas = [['Planta','UBT','Maquina','Total Minutos','Total Horas','Num. Paros','Promedio Minutos']];
+    const filas = [['Planta','UBT','Maquina','Minutos Mantto','Horas Mantto','Paros Mantto','Promedio Minutos','Minutos fuera de Mantto','Atenciones fuera de Mantto']];
     Object.entries(porMaquina).sort((a,b)=>b[1].minutos-a[1].minutos).forEach(([k,v])=>{
       const [pl,ub,mq] = k.split('|');
-      filas.push([pl,ub,mq,v.minutos,(v.minutos/60).toFixed(2),v.paros,(v.minutos/v.paros).toFixed(1)]);
+      filas.push([pl,ub,mq,v.minutos,(v.minutos/60).toFixed(2),v.paros,
+                  v.paros?(v.minutos/v.paros).toFixed(1):0, v.ajenos, v.parosAjenos]);
     });
     descargarCSV('tiempo-muerto-'+todayISO()+'.csv', filas);
   }
