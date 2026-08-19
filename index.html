@@ -329,6 +329,8 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.4.0 = correcciones: mes/año automáticos, bloqueo de usuario respetado en el atajo,
            sin recordatorios duplicados, sin doble guardado, avisos apilados,
            aviso de sin conexión y borrador del correctivo guardado en el dispositivo
+   2.6.1 = los cupos de Auditor de Calidad y de APQP ya no se mezclan: son 2 de cada uno
+           por línea, y en pantalla se ve quién la lleva de cada rol
    2.6.0 = el técnico puede marcar que la causa no era de mantenimiento (arnés, error de
            operación, material...): el tiempo se registra pero se contabiliza aparte y no
            ensucia el tiempo muerto de la máquina
@@ -376,7 +378,7 @@ const MAX_FILAS_POR_HOJA = 9;   /* la hoja física tiene 9 renglones */
    1.5.0 = TPM en formato mensual como la hoja de piso: casillas por semana/día/turno,
            solo se puede marcar el día en curso, guardado automático, firma del auditor
            y del líder registrados, botón de imprimir. TPM solo en las 4 máquinas que aplican  */
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.6.1';
 
 const PLANTA_NOMBRES = ["Planta 1","Planta 2","Planta 3","Partes de Servicio"];
 const DEFAULT_PLANTAS = {
@@ -1585,24 +1587,33 @@ function elegirUbt(u){ STATE.ubtElegida = u; sheetActivaKey = null; render(); }
 async function renderUbtsPlantaSetup(){
   const listaUbts = ubtsDeLaPlanta(STATE.plantasCfg, STATE.plantaHoy);
   const actuales = (STATE.usuario.ubtsPorPlanta && STATE.usuario.ubtsPorPlanta[STATE.plantaHoy]) || [];
-  const ocupadas = await ocupacionUbts(STATE.plantaHoy, STATE.rol);
-  const etiqueta = STATE.rol === 'apqp' ? 'APQP' : 'Auditor de Calidad';
+  const porRol = await ocupacionUbtsPorRol(STATE.plantaHoy);
+  const miRol = String(STATE.rol||'').trim().toLowerCase();     /* auditor o apqp */
+  const etiqueta = miRol === 'apqp' ? 'APQP' : 'Auditor de Calidad';
+  const otroNombre = miRol === 'apqp' ? 'Calidad' : 'APQP';
   return `<div class="wrap"><div class="card">
     <h2>¿Qué UBT(s) llevas en ${escapeHtml(STATE.plantaHoy)}?</h2>
     <p style="font-size:12.5px;color:var(--muted);margin-top:-8px;">
-      Máximo ${CUPO_UBT} ${escapeHtml(etiqueta)} por línea. Si ya está cubierta aparece en gris con el nombre de quien la lleva.
+      Máximo <b>${CUPO_UBT} de ${escapeHtml(etiqueta)}</b> por línea.
+      El cupo de ${escapeHtml(otroNombre)} es aparte: que una línea ya tenga ${escapeHtml(otroNombre)} no te impide tomarla.
     </p>
     <div class="ubt-check-grid">
       ${listaUbts.map(u=>{
-        const gente = ocupadas[u] || [];
-        const lleno = gente.length >= CUPO_UBT && !actuales.includes(u);
+        const o = porRol[u] || { auditor:[], apqp:[] };
+        const mios  = miRol === 'apqp' ? o.apqp : o.auditor;      /* los que sí ocupan mi cupo */
+        const otros = miRol === 'apqp' ? o.auditor : o.apqp;      /* los del otro rol, solo informativo */
+        const lleno = mios.length >= CUPO_UBT && !actuales.includes(u);
+        const notaOtros = otros.length
+          ? `<span style="font-size:9px;display:block;color:#0f3d5c;">${escapeHtml(otroNombre)}: ${escapeHtml(otros.join(', '))}</span>` : '';
         if(lleno){
-          return `<label style="opacity:.5;background:#f0f1f2;" title="${escapeHtml(gente.join(', '))}">
+          return `<label style="opacity:.5;background:#f0f1f2;" title="${escapeHtml(mios.join(', '))}">
             <input type="checkbox" disabled> ${escapeHtml(u)}
-            <span style="font-size:9.5px;display:block;color:var(--muted);">${escapeHtml(gente.join(', '))}</span></label>`;
+            <span style="font-size:9.5px;display:block;color:var(--muted);">${escapeHtml(etiqueta)}: ${escapeHtml(mios.join(', '))}</span>
+            ${notaOtros}</label>`;
         }
         return `<label><input type="checkbox" class="ubt-chk" value="${escapeHtml(u)}" ${actuales.includes(u)?'checked':''}> ${escapeHtml(u)}
-          ${gente.length?`<span style="font-size:9.5px;display:block;color:var(--muted);">con ${escapeHtml(gente.join(', '))}</span>`:''}</label>`;
+          ${mios.length?`<span style="font-size:9.5px;display:block;color:var(--muted);">con ${escapeHtml(mios.join(', '))}</span>`:''}
+          ${notaOtros}</label>`;
       }).join('')}
     </div>
     <button class="btn" onclick="guardarUbtsPlanta()">Guardar${STATE.editandoUbts?' cambios':' y continuar'}</button>
@@ -1612,11 +1623,21 @@ async function renderUbtsPlantaSetup(){
 async function guardarUbtsPlanta(){
   const seleccion = [...document.querySelectorAll('.ubt-chk:checked')].map(c=>c.value);
   if(seleccion.length===0){ showToast('⚠️ Selecciona al menos un UBT'); return; }
-  /* Se revisa el cupo otra vez por si alguien la tomó mientras tanto */
-  const ocupadas = await ocupacionUbts(STATE.plantaHoy, STATE.rol);
-  const llenas = seleccion.filter(u => (ocupadas[u]||[]).length >= CUPO_UBT);
+  /* Se revisa el cupo otra vez por si alguien la tomó mientras tanto.
+     Solo cuenta la gente de MI MISMO rol: Calidad y APQP tienen cupos independientes. */
+  const yaTenia = (STATE.usuario.ubtsPorPlanta||{})[STATE.plantaHoy] || [];
+  const porRol = await ocupacionUbtsPorRol(STATE.plantaHoy);
+  const miRol = String(STATE.rol||'').trim().toLowerCase();
+  const llenas = seleccion.filter(u => {
+    if(yaTenia.includes(u)) return false;                 /* las que ya llevaba no se revisan */
+    const o = porRol[u] || { auditor:[], apqp:[] };
+    const mios = miRol === 'apqp' ? o.apqp : o.auditor;
+    return mios.length >= CUPO_UBT;
+  });
   if(llenas.length){
-    showToast(`⚠️ ${llenas[0]} ya está cubierta por ${(ocupadas[llenas[0]]||[]).join(' y ')}`);
+    const o = porRol[llenas[0]] || { auditor:[], apqp:[] };
+    const mios = miRol === 'apqp' ? o.apqp : o.auditor;
+    showToast(`⚠️ ${llenas[0]} ya la llevan ${mios.join(' y ')}`);
     render();
     return;
   }
@@ -2207,12 +2228,33 @@ async function ocupacionMaquinas(planta, ubt){
   return mapa;
 }
 
-async function ocupacionUbts(planta, rol){
+/* Devuelve, por cada UBT, quién la lleva de Calidad y quién de APQP.
+   Los cupos son independientes: 2 de Calidad y 2 de APQP pueden estar en la misma línea. */
+async function ocupacionUbtsPorRol(planta){
   const usuarios = await listUsuarios();
+  const mapa = {};   /* ubt -> { auditor:[...], apqp:[...] } */
+  usuarios.forEach(u => {
+    const rol = String(u.rol || '').trim().toLowerCase();
+    if(rol !== 'auditor' && rol !== 'apqp') return;      /* ningún otro rol ocupa cupo */
+    if(u.bloqueado) return;
+    if(slug(u.nombre) === slug(STATE.nombre)) return;    /* uno mismo nunca se cuenta */
+    ((u.ubtsPorPlanta||{})[planta]||[]).forEach(ubt => {
+      mapa[ubt] ??= { auditor:[], apqp:[] };
+      mapa[ubt][rol].push(u.nombre);
+    });
+  });
+  return mapa;
+}
+
+/* Compatibilidad: solo la gente del mismo rol que quien pregunta */
+async function ocupacionUbts(planta, rol){
+  const porRol = await ocupacionUbtsPorRol(planta);
   const mapa = {};
-  usuarios
-    .filter(u => u.rol === rol && !u.bloqueado && slug(u.nombre) !== slug(STATE.nombre))
-    .forEach(u => ((u.ubtsPorPlanta||{})[planta]||[]).forEach(ubt => { (mapa[ubt] ??= []).push(u.nombre); }));
+  const clave = String(rol||'').trim().toLowerCase();
+  Object.entries(porRol).forEach(([ubt, o]) => {
+    const lista = o[clave] || [];
+    if(lista.length) mapa[ubt] = lista;
+  });
   return mapa;
 }
 
